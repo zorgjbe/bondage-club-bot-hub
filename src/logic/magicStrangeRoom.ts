@@ -90,6 +90,121 @@ function CharacterIsInUnderwear(C: API_Character) {
 	return true;
 }
 
+/**
+ * Determines whether an item in its current state permits locks.
+ * @param {Item} item - The item to check
+ * @returns {boolean} - TRUE if the asset's current type permits locks
+ */
+function InventoryDoesItemAllowLock(item: any) {
+	const asset = item.Asset as BC_Asset;
+	const property = item.Property;
+	const type = property && property.Type;
+	if (Array.isArray(asset.AllowLockType)) {
+		// "" is used to represent the null type in AllowLockType arrays
+		return type != null ? asset.AllowLockType.includes(type) : asset.AllowLockType.includes("");
+	} else {
+		return asset.AllowLock;
+	}
+}
+
+interface LockOptions {
+	combination?: number;
+	password?: string;
+	timer?: number;
+	showTimer?: boolean;
+	removeOnUnlock?: boolean;
+	accessibleToMembers?: number[];
+}
+
+function InventoryLock(char: API_Character, group: AssetGroupName, lockType: AssetLockType, lockOptions?: LockOptions): boolean {
+	let comboLock = false;
+	let passwordLock = false;
+	let timerLock = false;
+	if (["CombinationPadlock"].includes(lockType)) {
+		if (typeof lockOptions?.combination !== "number") {
+			logger.error(`Missing combination for ${lockType}`);
+			return false;
+		}
+		comboLock = true;
+	}
+	if (["TimerPasswordPadlock", "PasswordPadlock"].includes(lockType)) {
+		if (typeof lockOptions?.password !== "string") {
+			logger.error(`Missing password for ${lockType}`);
+			return false;
+		}
+		passwordLock = true;
+	}
+	if (["LoversTimerPadlock", "MistressTimerPadlock", "OwnerTimerPadlock", "TimerPasswordPadlock"].includes(lockType)) {
+		if (typeof lockOptions?.timer !== "number") {
+			logger.error(`Missing timer for ${lockType}`);
+			return false;
+		}
+		timerLock = true;
+	}
+
+	const lock = AssetGet("ItemMisc", lockType);
+	if (!lock.IsLock) {
+		logger.fatal(`Asked to lock with ${lockType}, which is not a lock`);
+		return false;
+	}
+
+	const item = char.Appearance.InventoryGet(group);
+	if (!item) {
+		logger.fatal(`Nothing to lock in group ${group} for ${char.VisibleName} (${char.MemberNumber})`);
+		return false;
+	}
+	if (!InventoryDoesItemAllowLock(item)) {
+		logger.fatal(`Asset in group ${group} is not lockable.`);
+		return false;
+	}
+
+	// @ts-ignore sleazily get at the item's properties
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-call
+	const itemProperties = item.Property || {};
+
+	if (comboLock) {
+		itemProperties.CombinationNumber = lockOptions!.combination;
+	}
+	if (passwordLock) {
+		itemProperties.Password = lockOptions?.password;
+		itemProperties.LockSet = true;
+	}
+	if (timerLock) {
+		const timer = Math.min(item.Asset.MaxTimer, lockOptions?.timer || 0);
+		itemProperties.RemoveTimer = timer;
+		itemProperties.ShowTimer = lockOptions?.showTimer || true;
+	}
+	if (["PasswordPadlock"].includes(lockType)) {
+		itemProperties.RemoveOnUnlock = lockOptions?.removeOnUnlock;
+	} else if (["LoversTimerPadlock", "MistressTimerPadlock", "OwnerTimerPadlock", "TimerPadlock", "TimerPasswordPadlock"].includes(lockType)) {
+		itemProperties.RemoveItem = lockOptions?.removeOnUnlock;
+	}
+	if (["HighSecurityPadlock"].includes(lockType)) {
+		let keys = [char.connection.Player.MemberNumber];
+		if (lockOptions?.accessibleToMembers) {
+			keys = keys.concat(lockOptions.accessibleToMembers);
+		}
+		itemProperties.MemberNumberListKeys = keys;
+	}
+
+	itemProperties.LockedBy = lockType;
+	if (!Array.isArray(itemProperties.Effect)) itemProperties.Effect = [];
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-call
+	itemProperties.Effect.push('Lock');
+
+	// @ts-ignore sleazily get at the item's properties
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-call
+	item.Property = itemProperties;
+
+	console.info(itemProperties);
+
+	// @ts-ignore trigger a sync
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-call
+	item.Sync();
+
+	return true;
+}
+
 function removeRestrains(target: API_Character) {
 	target.Appearance.RemoveItem("ItemVulva");
 	target.Appearance.RemoveItem("ItemButt");
@@ -579,9 +694,7 @@ export class MagicStrangeRoom extends LogicBase {
 					);
 					const item = sender.Appearance.AddItem(AssetGet("ItemDevices", "SmallWoodenBox"));
 					item?.SetDifficulty(100);
-					// TODO: Lock
-					// InventoryLock(sender, InventoryGet(sender, "ItemDevices"), { Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock") })
-					// InventoryGet(sender, "ItemDevices").Property.CombinationNumber = lockCode
+					InventoryLock(sender, "ItemDevices", "CombinationPadlock", { combination: this.lockCode });
 				} else if (!this.woodenBoxOpen && msg.includes("open")) {
 					if (!sender.CanInteract()) {
 						sender.Tell(
@@ -619,9 +732,8 @@ export class MagicStrangeRoom extends LogicBase {
 					);
 					const item = sender.Appearance.AddItem(AssetGet("ItemDevices", "SmallWoodenBox"));
 					item?.SetDifficulty(100);
-					// TODO: Lock
-					// InventoryLock(sender, InventoryGet(sender, "ItemDevices"), { Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock")})
-					// InventoryGet(sender, "ItemDevices").Property.CombinationNumber = lockCode
+					InventoryLock(sender, "ItemDevices", "CombinationPadlock", { combination: this.lockCode });
+
 					if (this.charPos.get(partner.MemberNumber) === "imprisoned") {
 						this.imprisonedList.add(sender.MemberNumber);
 						this.imprisonedList.add(partner.MemberNumber);
@@ -896,12 +1008,8 @@ export class MagicStrangeRoom extends LogicBase {
 	story1(sender: API_Character) {
 		const partner = this.getPartner(sender);
 		if (sender.Appearance.InventoryGet("ItemMouth")?.Asset.Name === "HarnessBallGag" && sender.Appearance.InventoryGet("ItemArms")?.Asset.Name === "LeatherArmbinder") {
-			// TODO: Set the lock code
-			// InventoryLock(sender, InventoryGet(sender, "ItemMouth"), { Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock")})
-			// InventoryGet(sender, "ItemMouth").Property.CombinationNumber = lockCode
-			// InventoryLock(sender, InventoryGet(sender, "ItemArms"), { Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock")})
-			// InventoryGet(sender, "ItemArms").Property.CombinationNumber = lockCode
-			// ChatRoomCharacterUpdate(sender)
+			InventoryLock(sender, "ItemMouth", "CombinationPadlock", { combination: this.lockCode });
+			InventoryLock(sender, "ItemArms", "CombinationPadlock", { combination: this.lockCode });
 			sender.Tell(
 				"Emote",
 				"*Private: You hear a 'beep' coming from the gag and the armbinder. Immediately after you hear the locks on your restraints closing with a metallic sound. Now you have no chance of taking the restraints off."
@@ -957,11 +1065,7 @@ export class MagicStrangeRoom extends LogicBase {
 			this.dildoLocked = true;
 			const item = this.dildoInside.Appearance.AddItem(AssetGet("ItemPelvis", "PolishedChastityBelt"));
 			item?.Extended?.SetType("ClosedBack");
-			// TODO: Lock
-			// InventoryLock(this.dildoInside, InventoryGet(this.dildoInside, "ItemPelvis"), {
-			// 	Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock")
-			// });
-			// InventoryGet(this.dildoInside, "ItemPelvis").Property.CombinationNumber = lockCode;
+			InventoryLock(this.dildoInside, "ItemPelvis", "CombinationPadlock", { combination: this.lockCode });
 		}
 	}
 
@@ -1028,11 +1132,7 @@ export class MagicStrangeRoom extends LogicBase {
 				blindfold?.SetDifficulty(100);
 				const box = sender.Appearance.AddItem(AssetGet("ItemDevices", "SmallWoodenBox"));
 				box?.SetDifficulty(100);
-				// TODO: Lock
-				// InventoryLock(sender, InventoryGet(sender, "ItemDevices"), {
-				// 	Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock")
-				// });
-				// InventoryGet(sender, "ItemDevices").Property.CombinationNumber = lockCode;
+				InventoryLock(sender, "ItemDevices", "CombinationPadlock", { combination: this.lockCode });
 				if (customCompareArray(this.insertedCode, this.alternativeCode)) {
 					this.storyProgress = StoryProgress.mistressAndSlave;
 					const Ending = `Ending - 'The Mistress and The Slave' for: Mistress ${partner.Name} (${partner.MemberNumber}) & her slave ${sender.Name} (${sender.MemberNumber}).`;
