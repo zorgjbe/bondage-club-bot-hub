@@ -584,7 +584,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			character.Tell("Emote", `*[The following is needed for that room to function:\n${kickReasons.map(s => " - " + s + ".").join("\n")}\n\nYou will be kicked in 10 seconds. You can change and comeback if you want.]`);
 			if (character.IsRoomAdmin()) {
 				character.Tell("Whisper", "[As you are a room admin, you will be allowed to stay.]");
-				logger.info(`Not kicking room admin ${character})`);
+				logger.info(`Not kicking room admin ${character}`);
 				// } else if (!strict) {
 				// 	character.Tell("Whisper", "[As you were already in the room when the bot started, you will be allowed to stay, but the bot will ignore you]");
 				// 	logger.info(`Not kicking already present ${character}`);
@@ -612,7 +612,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			} else {
 				customer.applyRestraints();
 			}
-		} else if (kickReasons.length === 0) {
+		} else {
 			customer = new MagicCharacter(character);
 			this.customers.set(character.MemberNumber, customer);
 		}
