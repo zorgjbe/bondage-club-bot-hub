@@ -1,4 +1,6 @@
 import { AssetGet, BC_PermissionLevel, logger, VibratorIntensity } from "bondage-club-bot-api";
+
+import { format, load, ordinal } from "../magicStrings";
 import { AdministrationLogic } from "./administrationLogic";
 import { dressLike, dressType, freeCharacter, reapplyClothing } from "./magicSupport";
 
@@ -6,6 +8,46 @@ const permissionCost = 5;
 const punishmentCost = 10;
 const domLv2Cost = 10;
 const adulationCost = 3;
+
+const maxStrikes = 3;
+
+load({
+	greetings: {
+		entry_1: "*[ROOM EXPLANATION: orgasm are prohibited. More info in %s's Bio. READ IT]",
+		entry_2: "*[Say or whisper '!leave' and all the locks on you will be unlocked, but you will also be kicked out.]",
+		known: "Welcome back %s. Don't worry I didn't forget about you. Hihihi~",
+		dom: [
+			"Hello %s, and enjoy your time in the Denial Bar. You can earn !points by giving those cuties a good time. But be careful to not rush too much, or I will pass on rewarding you!",
+			"Greetings %s, welcome to my special shop. You have now the possiblity to earn !points by… arousing other girls here. Then you will be able to use those point to !buy some of our particular offers. Just remember that I will not award any points if you rush too much, so take the time to play and arouse these nice girls~"
+		],
+		sub: "%s, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you~",
+		very_sub: "Also, since you seems very submissive to me, I have decided to give you something else you may appreciate. A second vibrating dildo. Hihihi~"
+	},
+	adulation: {
+		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you.",
+		order: {
+			kiss: "ORDER: Kiss %s's feet or you will receive one strike."
+		},
+		bought: "%s will take care of that. %s points remainining."
+	},
+	punishment: {
+		too_many_strikes: "%d strikes, you need to be punished now.",
+		begin: "You will now stay like this for a while. Try resisting a couple of orgasms and I may decide to free you again.",
+		end: "Okay %s. I hope you have learned your lesson. You are free now.",
+		no_bot: "Eheh, so you'd like to see me tied up? Soo nice of you. But my Mistress ordered me to manage this place… maybe another time?",
+		bought: "Oh %s, it seems that %s would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles."
+	},
+	orgasm: {
+		warn: "You had an orgasm without permission, %s. I am kind, but at the %s strike I WILL punish you.",
+		punish: "%s, you had an orgasm without permission, again. You need to be punished.",
+		lost: `*[One orgasm permission used. Orgasm permission remaining: %d]`,
+		bought: "*%s has bought an orgasm permission for you. You have now %d permissions."
+	},
+	tampering: {
+		warn: "%s! Do not mess with the vibrators, you are not allowed to do that. This is a strike for you!",
+		reset: "*The vibrator automatically returns to the initial setting."
+	}
+});
 
 const botDescription = `Welcome to the MAGIC DENIAL BAR
 
@@ -23,7 +65,7 @@ Use your hard earned points to buy new items to tease and reward your favorite p
 RULES:
 - Orgasms are prohibited
 - Messing with the vibrators is prohibited
-You will receive one strike each time you break a rule. After 3 strikes you will be dollified.
+You will receive one strike each time you break a rule. After ${maxStrikes} strikes you will be dollified.
 To be released from your dollification predicament you have to demonstrate your obedience resisting 2 orgasms.
 
 ------------------------------------------------
@@ -89,16 +131,16 @@ export class MagicCharacter {
 
 	assignRole() {
 		if (this.character.Reputation.Dominant < 50) {
-			this.character.Tell("Chat", `${this.name}, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you.`);
+			this.character.Tell("Chat", format('greetings.sub', this.name));
 			this.role = 'sub1';
 		} else {
-			this.character.Tell("Chat", `Greetings ${this.name}, welcome to my special shop. You have now the possiblity to earn !points by… arousing other girls here. Then you will be able to use those point to !buy some of our particular offers. Just remember that I will not award any points if you rush too much. Just take the time to play and arouse these nice girls.`);
+			this.character.Tell("Chat", format('greetings.dom', this.name));
 			this.role = 'dom';
 			this.points = 5;
 		}
 
 		if (this.character.Reputation.Dominant <= -50) {
-			this.character.Tell("Chat", "Also, since you seems very submissive to me, I have decided to give you something else you may appreciate. A second vibrating dildo. Hihihi~");
+			this.character.Tell("Chat", format('greetings.very_sub'));
 			this.role = 'sub2';
 		}
 	}
@@ -153,20 +195,19 @@ export class MagicCharacter {
 		}
 
 		delete this.orders.adulation;
-		this.character.Tell("Whisper", "I asked you something extremely easy and you were not able to do it. This is one strike for you.");
+		this.character.Tell("Whisper", format('adulation.strike', this.name));
 		this.giveStrike();
 	}
 
 	adulate(target: MagicCharacter) {
 		this.orders = { "adulation": { timeoutHandle: setTimeout(this.adulationCheck.bind(this), 5 * 60 * 1000), adulationTarget: target.MemberNumber } };
-		this.character.Tell("Whisper", `ORDER: Kiss ${target.name}'s feet or you will receive one strike.`);
+		this.character.Tell("Whisper", format('adulation.order.kiss', target.name));
 	}
 
 	giveStrike() {
 		this.strike += 1;
-		if (this.strike >= 3) {
-			this.character.Tell("Whisper", "3 strikes, you need to be punished now.");
-			/* FIXME: Original makes you punish yourself, and the bot isn't a customer */
+		if (this.strike >= maxStrikes) {
+			this.character.Tell("Whisper", format("punishment.too_many_strikes", maxStrikes));
 			this.applyPunishment();
 		}
 	}
@@ -176,17 +217,18 @@ export class MagicCharacter {
 		this.dollLock();
 		this.applyRestraints(true);
 		this.beingPunished = true;
-		this.character.Tell("Chat", "You will now stay like this for a while. Try resisting a couple of orgasms and I may decide to free you again.");
+		this.character.Tell("Chat", format('punishment.begin'));
 	}
 
 	private orgasmReaction() {
 		this.strike += 1;
-		if (this.strike <= 2) {
-			this.character.Tell("Chat", `${this.name}, you had an orgasm without permission. I am kind, but at the third strike I WILL punish you.`);
-		} else {
-			this.character.Tell("Chat", `${this.name}, you had an orgasm without permission, again. You need to be punished.`);
-			this.applyPunishment();
+		if (this.strike < maxStrikes) {
+			this.character.Tell("Chat", format('orgasm.warn', this.name, ordinal(maxStrikes)));
+			return;
 		}
+
+		this.character.Tell("Chat", format('orgasm.punish', this.name));
+		this.applyPunishment();
 	}
 
 	didOrgasm(successfully: boolean) {
@@ -194,7 +236,7 @@ export class MagicCharacter {
 			if (this.beingPunished) {
 				this.orgasmResisted += 1;
 				if (this.orgasmResisted >= 2) {
-					this.character.Tell("Chat", `Okay ${this.name}. I hope you have learned your lesson. You are free now.`);
+					this.character.Tell("Chat", format('punishment.end', this.name));
 					this.orgasmResisted = 0;
 					this.strike = 0;
 					this.beingPunished = false;
@@ -209,7 +251,7 @@ export class MagicCharacter {
 		if (this.rules.includes("denial") && !this.beingPunished) {
 			if (this.allowedOrgasms > 0) {
 				this.allowedOrgasms -= 1;
-				this.character.Tell("Emote", `*[One orgasm permission used. Orgasm permission remaining: ${this.allowedOrgasms}]`);
+				this.character.Tell("Emote", format('orgasm.lost', this.allowedOrgasms));
 			} else {
 				setTimeout(this.orgasmReaction.bind(this), 5 * 1000);
 			}
@@ -357,7 +399,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				sender.Tell("Emote", `*Permission bought. Points remaining: ${customer.points}`);
 
 				targetCustomer.allowedOrgasms += 1;
-				target.Tell("Emote", `*${customer.name} has bought an orgasm permission for you. You have now ${targetCustomer.allowedOrgasms} permissions."`);
+				target.Tell("Emote", format('orgasm.bought', customer.name, targetCustomer.allowedOrgasms));
 			}
 				break;
 
@@ -385,7 +427,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 
 				if (targetCustomer.character.IsBot()) {
-					sender.Tell("Whisper", "Eheh, so you'd like to see me tied up? Soo nice of you. But my Mistress ordered me to manage this place... maybe another time?");
+					sender.Tell("Whisper", format('punishment.no_bot'));
 					return;
 				}
 
@@ -393,7 +435,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				customer.points -= punishmentCost;
 				sender.Tell("Emote", `*Punishment bought. Points remaining: ${customer.points}`);
 
-				target.Tell("Chat", `Oh ${targetCustomer.name}, it seems that ${customer.name} would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles.`);
+				target.Tell("Chat", format('punishment.bought', targetCustomer.name));
 				targetCustomer.applyPunishment();
 
 			}
@@ -420,7 +462,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				customer.points -= adulationCost;
 				logger.info(`${sender} bought adulation from ${targetSub.name}`);
 
-				sender.Tell("Whisper", `${targetSub.name} will take care of that. ${customer.points} points remainining.`);
+				sender.Tell("Whisper", format('adulation.bought', targetSub.name, customer.points));
 				targetSub.adulate(customer);
 			}
 				break;
@@ -517,12 +559,12 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 		}
 
-		character.Tell("Emote", `*[ROOM EXPLANATION: orgasm are prohibited. More info in ${connection.Player.VisibleName} Bio. READ IT]`, character.MemberNumber);
-		character.Tell("Emote", "*[Say or whisper '!leave' and all the locks on you will be unlocked, but you will also be kicked out.]");
+		character.Tell("Emote", format('greetings.entry_1', connection.Player.VisibleName));
+		character.Tell("Emote", format('greetings.entry_2'));
 
 		let customer = this.customers.get(character.MemberNumber);
 		if (customer) {
-			character.Tell("Chat", `Welcome back ${character.VisibleName}. Don't worry I didn't forget about you. Hihihi~`);
+			character.Tell("Chat", format('greetings.known', character.VisibleName));
 
 			if (customer.beingPunished) {
 				customer.dressLike("doll");
@@ -549,7 +591,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			// console.log("Keys :" + Object.keys(data.Dictionary))
 			// console.log("Dictionary 0 :" + data.Dictionary[0].MemberNumber)
 			if ((msg.includes("Vibe") || msg.includes("Dildo") || msg.includes("Buttplug")) && (msg.includes("creaseTo-1") || ((msg.includes("creaseTo") || msg.includes("ModeChange")) && customer.role !== "dom2"))) {
-				connection.SendMessage("Chat", `${sender.VisibleName}! Do not mess with the vibrators, you are not allowed to do that. This is a strike for you!`);
+				connection.SendMessage("Chat", format('tampering.warn', sender.VisibleName));
 
 				const target = this.getActiveCustomer(message.Dictionary[0].MemberNumber as number);
 				if (!target) {
@@ -560,7 +602,7 @@ export class MagicDenialBar extends AdministrationLogic {
 					const buttAsset = target.character.Appearance.InventoryGet("ItemButt");
 					buttAsset?.Vibrator?.SetIntensity(target.buttIntensity, false);
 				}
-				connection.SendMessage("Emote", "*The vibrator automatically returns to the initial setting.");
+				connection.SendMessage("Emote", format('tampering.reset'));
 
 				customer.giveStrike();
 			}
