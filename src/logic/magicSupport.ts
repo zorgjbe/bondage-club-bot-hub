@@ -60,7 +60,7 @@ export type dressType = "doll" | "talkingDoll" | "maid" | "cow" | "pony" | "kitt
 
 export function dressLike(target: API_Character, dress: dressType, dressColor = "default", removeUnderwear = true) {
 	// TODO: backup appearance
-	// memorizeClothing(ChatRoomCharacter[R])
+	memorizeClothing(target);
 	removeClothes(target, removeUnderwear);
 
 	// Get the hair color
@@ -241,7 +241,12 @@ export function customInventoryGroupIsBlocked(C: API_Character, GroupName: Asset
 const clothMemoryList = new Map<number, string>();
 
 export function memorizeClothing(char: API_Character) {
-	const app = JMod.JMod_exportAppearanceBundle(char.Appearance.MakeAppearanceBundle());
+	// Do not lose saved outfits
+	let app = clothMemoryList.get(char.MemberNumber);
+	if (app) return;
+
+	app = JMod.JMod_exportAppearanceBundle(char.Appearance.MakeAppearanceBundle());
+	logger.verbose(`Saved outfit for ${char}`);
 	clothMemoryList.set(char.MemberNumber, app);
 }
 
@@ -254,6 +259,7 @@ export function reapplyClothing(char: API_Character) {
 		const bundle = JMod.JMod_importAppearanceBundle(app);
 		if (!JMod.JMod_applyAppearanceBundle(char, bundle, undefined, undefined, true))
 			logger.alert(`failed to restore appearance for ${char.VisibleName} (${char.MemberNumber})\n\t${bundle}`);
+		logger.verbose(`Applied outfit for ${char}`);
 		clothMemoryList.delete(char.MemberNumber);
 	}
 	catch {
