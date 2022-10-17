@@ -1,5 +1,6 @@
 /* eslint-disable no-constant-condition */
 import { AssetGet, BC_PermissionLevel, logger, LogicBase } from "bondage-club-bot-api";
+import { customInventoryGroupIsBlocked, freeCharacter, isExposed } from "./magicSupport";
 
 enum StoryProgress {
 	/** Beginning */
@@ -43,44 +44,6 @@ function customCompareArray(array1: number[], array2: number[]): boolean {
 	return true;
 }
 
-function customInventoryGroupIsBlocked(C: API_Character, GroupName: AssetGroupItemName, ignoreItemArray: string[] = []) {
-	// in this case C is ChatRoomCharacter
-	// Items can block each other (hoods blocks gags, belts blocks eggs, etc.)
-	for (const E of C.Appearance.Appearance) {
-		if (ignoreItemArray.includes(E.Asset.Name)) continue;
-		if (!E.Asset.Group.Clothing && E.GetBlock().includes(GroupName)) return true;
-	}
-
-	// Nothing is preventing the group from being used
-	return false;
-
-}
-
-function InventoryDoItemsExposeGroup(C: API_Character, TargetGroup: AssetGroupName, GroupsToCheck: AssetGroupName[]): boolean {
-	return GroupsToCheck.every((Group) => {
-		const Item = C.Appearance.InventoryGet(Group);
-		return !Item || Item.Asset.Expose.includes(TargetGroup);
-	});
-}
-
-function InventoryDoItemsBlockGroup(C: API_Character, TargetGroup: AssetGroupItemName, GroupsToCheck: AssetGroupName[]): boolean {
-	return GroupsToCheck.some((Group) => {
-		const Item = C.Appearance.InventoryGet(Group);
-		return Item && Item.Asset.Block && Item.Asset.Block.includes(TargetGroup);
-	});
-}
-
-function isExposed(C: API_Character, ignoreItemArray: string[] = []): boolean {
-	return (
-		InventoryDoItemsExposeGroup(C, "ItemBreast", ["Cloth"]) &&
-		InventoryDoItemsExposeGroup(C, "ItemBreast", ["Bra"]) &&
-		!InventoryDoItemsBlockGroup(C, "ItemVulva", ["Cloth", "Socks", "ItemPelvis", "ItemVulvaPiercings"]) &&
-		InventoryDoItemsExposeGroup(C, "ItemVulva", ["ClothLower", "Panties"]) &&
-		!customInventoryGroupIsBlocked(C, "ItemNipples") &&
-		!customInventoryGroupIsBlocked(C, "ItemVulva", ignoreItemArray)
-	);
-}
-
 function CharacterIsInUnderwear(C: API_Character) {
 	for (const A of C.Appearance.Appearance)
 		if ((A.Asset != null) && (A.Asset.Group.Category === "Appearance") && A.Asset.Group.AllowNone && !A.Asset.BodyCosplay && !A.Asset.Group.BodyCosplay)
@@ -88,32 +51,6 @@ function CharacterIsInUnderwear(C: API_Character) {
 				if (!(A.Asset.Group.BodyCosplay && C.OnlineSharedSettings && C.OnlineSharedSettings.BlockBodyCosplay))
 					return false;
 	return true;
-}
-
-function removeRestrains(target: API_Character) {
-	target.Appearance.RemoveItem("ItemVulva");
-	target.Appearance.RemoveItem("ItemButt");
-	target.Appearance.RemoveItem("ItemArms");
-	target.Appearance.RemoveItem("ItemHands");
-	target.Appearance.RemoveItem("ItemNeck");
-	target.Appearance.RemoveItem("ItemMouth");
-	target.Appearance.RemoveItem("ItemMouth2");
-	target.Appearance.RemoveItem("ItemMouth3");
-	target.Appearance.RemoveItem("ItemTorso");
-	target.Appearance.RemoveItem("ItemLegs");
-	target.Appearance.RemoveItem("ItemFeet");
-	target.Appearance.RemoveItem("ItemBoots");
-	target.Appearance.RemoveItem("ItemNipplesPiercings");
-	target.Appearance.RemoveItem("ItemPelvis");
-	target.Appearance.RemoveItem("ItemHead");
-	target.Appearance.RemoveItem("ItemDevices");
-}
-
-function free(target: API_Character, reapplyCloth: boolean = true): void {
-	removeRestrains(target);
-	// if (reapplyCloth)
-	// TODO
-	// reapplyClothing(target);
 }
 
 function lookLikeSlave(char: API_Character): boolean {
@@ -276,7 +213,7 @@ export class MagicStrangeRoom extends LogicBase {
 		} else if (this.charList.includes(character.MemberNumber)) {
 			for (const C of connection.chatRoom.characters) {
 				if (this.charList.includes(C.MemberNumber) && !this.imprisonedList.has(C.MemberNumber)) {
-					free(C);
+					freeCharacter(C);
 				}
 			}
 			this.conn.SendMessage("Emote", "*[RESET: sorry one player left the game. It needs to be reset.]");
