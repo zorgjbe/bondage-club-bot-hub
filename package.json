@@ -12,6 +12,7 @@
     "start-kidnappers": "yarn run build && node --trace-warnings --enable-source-maps build/index_kidnappers.js",
     "start-mistresstrouble": "yarn run build && node --trace-warnings --enable-source-maps build/index_mistresstrouble.js",
     "start-magicstrangeroom": "yarn run build && node --trace-warnings --enable-source-maps build/index_magicstrangeroom.js",
+    "start-magicdenialbar": "yarn run build && node --trace-warnings --enable-source-maps build/index_magicdenialbar.js",
     "start-scheduler": "yarn run build && node --trace-warnings --enable-source-maps build/scheduler.js"
   },
   "author": "Jomshir98",
