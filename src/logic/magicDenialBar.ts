@@ -13,15 +13,24 @@ const maxStrikes = 3;
 
 load({
 	greetings: {
-		entry_1: "*[ROOM EXPLANATION: orgasm are prohibited. More info in %s's Bio. READ IT]",
-		entry_2: "*[Say or whisper '!leave' and all the locks on you will be unlocked, but you will also be kicked out.]",
-		known: "Welcome back %s. Don't worry I didn't forget about you. Hihihi~",
+		entry_1: "*[Welcome to the Denial Bar, where orgasms are prohibited. More info in %s's Bio. Please READ IT!]",
+		entry_2: "*[Whisper '!leave' to %s and all the locks on you will be unlocked, but you will also be kicked out.]",
+		known: [
+			"Welcome back %s. Don't worry I didn't forget about you. Hihihi~",
+			"Oh %s, you came back~. Well, you know what's going on around here!"
+		],
 		dom: [
 			"Hello %s, and enjoy your time in the Denial Bar. You can earn !points by giving those cuties a good time. But be careful to not rush too much, or I will pass on rewarding you!",
 			"Greetings %s, welcome to my special shop. You have now the possiblity to earn !points by… arousing other girls here. Then you will be able to use those point to !buy some of our particular offers. Just remember that I will not award any points if you rush too much, so take the time to play and arouse these nice girls~"
 		],
-		sub: "%s, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you~",
-		very_sub: "Also, since you seems very submissive to me, I have decided to give you something else you may appreciate. A second vibrating dildo. Hihihi~"
+		sub: [
+			"%s, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you~",
+			"Here's a dildo and chastity belt for you, %s. And don't forget, no cumming!~"
+		],
+		very_sub: [
+			"Also, since you seems very submissive to me, I have decided to give you something else you may appreciate. A second vibrating dildo. Hihihi~",
+			"Here's a little bonus for you, since you seem like a kinky girl! Hehe~"
+		]
 	},
 	adulation: {
 		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you.",
