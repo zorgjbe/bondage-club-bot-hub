@@ -2,6 +2,21 @@
 
 import { AssetGet, JMod, logger } from "bondage-club-bot-api";
 
+type MS_ChatRoomMessageDictionaryEntryType =
+	| "SourceCharacter"
+	| "DestinationCharacter"
+	| "DestinationCharacterName"
+	| "TargetCharacter"
+	| "TargetCharacterName"
+	| "AssetName";
+
+interface MS_ChatRoomMessageDictionaryEntry {
+	[k: string]: any;
+	Tag?: MS_ChatRoomMessageDictionaryEntryType | string;
+	Text?: string;
+	MemberNumber?: number;
+}
+
 // -----------------------------------------------------------------------------------------------
 
 // function freeAll() {
@@ -265,4 +280,20 @@ export function reapplyClothing(char: API_Character) {
 	catch {
 		logger.alert(`failed to unpack appearance for ${char.VisibleName} (${char.MemberNumber})\n\t${app}`);
 	}
+}
+
+export function lookUpTagInChatMessage(data: BC_Server_ChatRoomMessage, tag: string) {
+	if (!data.Dictionary) return undefined;
+
+	// logger.info(`${JSON.stringify(data.Dictionary)}`);
+	for (const [_s, D] of Object.entries(data.Dictionary as MS_ChatRoomMessageDictionaryEntry[])) {
+		// logger.info(`${JSON.stringify(D)}: ${D.Tag}`);
+		if (tag === "TargetMemberNumber" && ["DestinationCharacter", "DestinationCharacterName", "TargetCharacter", "TargetCharacterName"].includes(D.Tag) && D.MemberNumber)
+			return D.MemberNumber;
+
+		if (["ActivityName", "ActivityGroup"].includes(tag) && D.Text) {
+			if (tag === D.Tag) return D.Text;
+		}
+	}
+	return undefined;
 }

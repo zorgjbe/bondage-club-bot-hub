@@ -2,7 +2,7 @@ import { AssetGet, BC_PermissionLevel, logger, VibratorIntensity } from "bondage
 
 import { format, load, ordinal } from "../magicStrings";
 import { AdministrationLogic } from "./administrationLogic";
-import { dressLike, dressType, freeCharacter, reapplyClothing } from "./magicSupport";
+import { dressLike, dressType, freeCharacter, lookUpTagInChatMessage, reapplyClothing } from "./magicSupport";
 
 const permissionCost = 5;
 const punishmentCost = 10;
@@ -37,6 +37,9 @@ load({
 		order: {
 			kiss: "ORDER: Kiss %s's feet or you will receive one strike."
 		},
+		success: {
+			kiss: "You did good, %s."
+		},
 		bought: "%s will take care of that. %s points remainining."
 	},
 	punishment: {
@@ -55,6 +58,10 @@ load({
 	tampering: {
 		warn: "%s! Do not mess with the vibrators, you are not allowed to do that. This is a strike for you!",
 		reset: "*The vibrator automatically returns to the initial setting."
+	},
+	dom: {
+		invalid_target: "Sorry, but no points will be awarded to arouse non-submissive girls or girls being punished. Still, feel free to enjoy them!",
+		points_awarded: "*[Points: %d (+%d)]"
 	}
 });
 
@@ -100,7 +107,12 @@ Following commands are for dommes only.
 
 
 type MagicCharacterRole = "sub1" | "sub2" | "dom" | "dom2" | "";
-
+type MagicOrders = {
+	"adulation"?: {
+		timeoutHandle: NodeJS.Timeout;
+		adulationTarget: number;
+	}
+};
 export class MagicCharacter {
 	readonly character: API_Character;
 	role: MagicCharacterRole = "";
@@ -113,9 +125,9 @@ export class MagicCharacter {
 	allowedOrgasms = 0;
 	buttIntensity = VibratorIntensity.LOW;
 	vulvaIntensity = VibratorIntensity.LOW;
-	lastActivity = Date.now();
+	lastActivity = 0;
 	rules: string[] = [];
-	orders: any = {};
+	orders: MagicOrders = {};
 
 	constructor(char: API_Character) {
 		this.character = char;
@@ -569,7 +581,7 @@ export class MagicDenialBar extends AdministrationLogic {
 		}
 
 		character.Tell("Emote", format('greetings.entry_1', connection.Player.VisibleName));
-		character.Tell("Emote", format('greetings.entry_2'));
+		character.Tell("Emote", format('greetings.entry_2', connection.Player.VisibleName));
 
 		let customer = this.customers.get(character.MemberNumber);
 		if (customer) {
@@ -594,6 +606,9 @@ export class MagicDenialBar extends AdministrationLogic {
 		const customer = this.getActiveCustomer(sender.MemberNumber);
 		if (!customer) return;
 
+		const targetID = lookUpTagInChatMessage(message, "TargetMemberNumber");
+		const target = targetID ? this.getActiveCustomer(targetID as number) : null;
+
 		const msg = message.Content;
 		if (message.Type === "Action") {
 			// console.log("msg :" + msg)
@@ -602,9 +617,8 @@ export class MagicDenialBar extends AdministrationLogic {
 			if ((msg.includes("Vibe") || msg.includes("Dildo") || msg.includes("Buttplug")) && (msg.includes("creaseTo-1") || ((msg.includes("creaseTo") || msg.includes("ModeChange")) && customer.role !== "dom2"))) {
 				connection.SendMessage("Chat", format('tampering.warn', sender.VisibleName));
 
-				const target = this.getActiveCustomer(message.Dictionary[0].MemberNumber as number);
 				if (!target) {
-					logger.error(`failed to find target of vibe change message ${message}`);
+					logger.error(`failed to find target of vibe change message ${JSON.stringify(message)}`);
 				} else {
 					const dildoAsset = target.character.Appearance.InventoryGet("ItemVulva");
 					dildoAsset?.Vibrator?.SetIntensity(target.vulvaIntensity, false);
@@ -616,12 +630,82 @@ export class MagicDenialBar extends AdministrationLogic {
 				customer.giveStrike();
 			}
 		} else if (message.Type === "Activity") {
+			logger.info(`Processing activity ${message.Content} from ${customer} to ${target}`);
+
 			if (msg.includes("OrgasmResist")) {
 				logger.info(`${sender} resisted her orgasm`);
 				customer.didOrgasm(false);
 			} else if (msg.includes("Orgasm")) {
 				logger.info(`${sender} failed to resist her orgasm`);
 				customer.didOrgasm(true);
+			}
+
+			if (!target) {
+				logger.error(`failed to resolve message target: ${targetID}`);
+				return;
+			}
+
+			if (customer.isDom()) {
+				logger.info(`${customer} is Dom, checking activity effects`);
+				const lastActivity = customer.lastActivity;
+				customer.lastActivity = Date.now();
+
+				if (lastActivity + Date.now() <= 30000) {
+					logger.info(`${customer} too fast!`);
+					return;
+				}
+
+				// let ActivityName = lookUpTagInChatMessage<string>(message, "ActivityName");
+				// let ActivityGroup = lookUpTagInChatMessage<string>(message, "ActivityGroup");
+
+				if (target.beingPunished || !target.isSub()) {
+					sender.Tell("Whisper", format('dom.invalid_target'));
+					return;
+				}
+
+				// TODO: BotAPI doesn't provide that
+				// Converts from activity name to the activity object
+				// if (typeof ActivityName === "string") ActivityName = AssetGetActivity(targetChar.AssetFamily, ActivityName);
+				// if ((ActivityName == null) || (typeof ActivityName === "string")) return;
+
+				// Calculates the next progress factor
+				// var Factor = (PreferenceGetActivityFactor(targetChar, ActivityName.Name, (targetChar.ID == 0)) * 5) - 10; // Check how much the character likes the activity, from -10 to +10
+				// Factor = Factor + (PreferenceGetZoneFactor(targetChar, ActivityGroup) * 5) - 10; // The zone used also adds from -10 to +10
+
+				const settings = target.character.ArousalSettings;
+				logger.info(`target ${target} arousal: ${settings?.Progress}, ${settings?.ProgressTimer}`);
+				const startProgress = settings?.Progress || 0;
+				const waitTime = Math.max((settings?.ProgressTimer || 0) * 1000, 5000);
+
+				logger.info(`${customer} activity, scheduling arousal check in ${waitTime}`);
+				setTimeout(() => {
+					const stopSettings = target.character.ArousalSettings;
+					const endProgress = stopSettings?.Progress || 0;
+					logger.info(`target ${target} arousal: ${stopSettings?.Progress}, ${stopSettings?.ProgressTimer}`);
+					const progressMade = Math.floor((endProgress - startProgress) / 10);
+					if (progressMade <= 0) {
+						logger.info(`${customer} activity, no progress made on ${target}! ${startProgress} → ${endProgress}`);
+						return;
+					}
+
+					const pointsGained = Math.min(progressMade, 0) + 1;
+					customer.points += pointsGained;
+					sender.Tell("Emote", format('dom.points_awarded', customer.points, pointsGained));
+					logger.info(`${sender} gained ${pointsGained} points`);
+
+				}, waitTime);
+			} else if (customer.isSub()) {
+				if (!("adulation" in customer.orders))
+					return;
+
+				if (msg.includes("ChatOther") && msg.includes("Kiss") && (msg.includes("ItemBoots") || msg.includes("ItemFeet"))) {
+					if (targetID === customer.orders.adulation?.adulationTarget) {
+						logger.info(`${sender} performed adulation on ${target}`);
+						sender.Tell("Whisper", format('adulation.success.kiss', sender.VisibleName));
+						clearTimeout(customer.orders.adulation?.timeoutHandle);
+						delete customer.orders.adulation;
+					}
+				}
 			}
 		}
 	}
