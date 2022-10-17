@@ -334,16 +334,34 @@ export class MagicDenialBar extends AdministrationLogic {
 			const customer = this.getActiveCustomer(sender);
 			if (!customer) return;
 
-			logger.info("!su role", args[0]);
+			let target;
+			let role;
+			let char;
 
-			if (args.length !== 1 || !["sub1", "sub2", "dom"].includes(args[0])) {
-				customer.character.Tell("Whisper", "!su role [sub1|sub2|dom]");
+			logger.info("!su role", ...args);
+			const arg1 = args.shift();
+			const arg2 = args.shift();
+			if (arg1 && ["sub1", "sub2", "dom", "dom2"].includes(arg1)) {
+				role = arg1;
+				target = customer;
+			} else if (arg1 && (char = this.identifyPlayerInRoom(connection.chatRoom, arg1)) && (typeof char === "object")
+				&& arg2 && ["sub1", "sub2", "dom", "dom2"].includes(arg2)) {
+				target = this.getActiveCustomer(char.MemberNumber);
+				role = arg2;
+			}
+
+			if (!target || !role) {
+				customer.character.Tell("Whisper", "!su role [member] [sub1|sub2|dom|dom2]");
 				return;
 			}
 
-			customer.character.Tell("Whisper", "Role changed to " + args[0]);
-			customer.role = args[0] as MagicCharacterRole;
-			customer.applyRestraints();
+			logger.info(`about to op ${target} to ${role}`);
+			customer.character.Tell("Whisper", `Role changed to ${role}`);
+			target.role = role as MagicCharacterRole;
+			target.applyRestraints();
+			if (customer.MemberNumber !== target.MemberNumber) {
+				target.character.Tell("Whisper", `Role changed to ${role} by ${customer}`);
+			}
 		});
 
 
