@@ -575,8 +575,8 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 		}
 
-		if (!["Hybrid", "Automatic"].includes(character.rawData?.ArousalSettings?.Active)) {
-			logger.info(`${character}: ${character.rawData?.ArousalSettings?.Active}`);
+		if (!["Hybrid", "Automatic"].includes(character.UNSAFE_rawData?.ArousalSettings?.Active)) {
+			logger.info(`${character}: ${character.UNSAFE_rawData?.ArousalSettings?.Active}`);
 			kickReasons.push("Arousal must be either Hybrid or Automatic");
 		}
 
