@@ -108,10 +108,9 @@ COMMANDS: all commands must be whispered.
 !leave - you will be freed and kicked out of the room.
 
 Following commands are for dommes only.
-!points - check how many points you have.
-!shop - identical to !buy, read below.
+!status - check your current status.
 !buy - look at the available items in the shop.
-!buy permission <name> - buy a permission for <name>
+!buy permission <name> - buy a permission for <name>.
 !buy DomLv2 - upgrade your status in the room.
 !buy adulation - someone will make you feel appreciated.
 !buy punishment <name> - punish <name> by turning them into a doll.
@@ -404,17 +403,11 @@ export class MagicDenialBar extends AdministrationLogic {
 			void sender.Kick();
 		}, "Get freed and leave the room");
 
-		this.registerCommand("points", (connection, args, sender) => {
-			const customer = this.getActiveCustomer(sender.MemberNumber);
-			if (!customer) {
-				logger.error(`Recieved "points" command from a non-customer: ${sender.VisibleName}, (${sender.MemberNumber})`);
-				return;
-			}
-			sender.Tell("Whisper", `You have ${customer.points} points. Use them with !shop or !buy.`);
-		}, "Show your current points balance");
+		this.registerCommand("status", this.onStatusCommand.bind(this), "Check your current status.");
+		this.registerCommand("points", this.onStatusCommand.bind(this));
 
 		this.registerCommandParsed("buy", this.onBuyCommand.bind(this), "Buy items from the shop");
-		this.registerCommandParsed("shop", this.onBuyCommand.bind(this), "Buy items from the shop");
+		this.registerCommandParsed("shop", this.onBuyCommand.bind(this));
 
 		this.registerSUCommand("role", (connection, args, sender) => {
 			const customer = this.getActiveCustomer(sender);
@@ -480,10 +473,39 @@ export class MagicDenialBar extends AdministrationLogic {
 		});
 	}
 
+	private onStatusCommand(connection: API_Connector, args: string, sender: API_Character) {
+		const customer = this.getActiveCustomer(sender.MemberNumber);
+		if (!customer) {
+			logger.error(`Recieved "status" command from a non-customer: ${sender}`);
+			return;
+		}
+		const m = [];
+		m.push(`Your role is ${customer.role}, and you have ${customer.points} points to use in the shop.`);
+		if (customer.isSub()) {
+			if (customer.beingPunished) {
+				m.push(`You're currently being punished, and need to resist ${maxResist - customer.orgasmResisted} orgasms before being released.`);
+			} else {
+				m.push(`- ${customer.strike} strikes`);
+				m.push(`- ${customer.allowedOrgasms} allowed orgasms.`);
+
+				const adulation = customer.orders.adulation;
+				if (adulation) {
+					const target = this.getActiveCustomer(adulation.target);
+					m.push(`---------`);
+					m.push(`You have been ordered to ${adulation.type} ${target?.name}.`);
+				}
+			}
+		} else if (customer.isDom()) {
+			m.push(`- ${customer.strike} strikes`);
+		}
+
+		sender.Tell("Whisper", m.join("\n"));
+	}
+
 	private onBuyCommand(connection: API_Connector, args: string[], sender: API_Character) {
 		const customer = this.getActiveCustomer(sender.MemberNumber);
 		if (!customer) {
-			logger.error(`Recieved "buy" command from a non-customer: ${sender.VisibleName}, (${sender.MemberNumber})`);
+			logger.error(`Recieved "buy" command from a non - customer: ${sender.VisibleName}, (${sender.MemberNumber})`);
 			return;
 		}
 
