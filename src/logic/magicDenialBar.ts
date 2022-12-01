@@ -725,6 +725,8 @@ export class MagicDenialBar extends AdministrationLogic {
 			if ((msg.includes("Vibe") || msg.includes("Dildo") || msg.includes("Buttplug")) && (msg.includes("creaseTo-1") || ((msg.includes("creaseTo") || msg.includes("ModeChange")) && customer.role !== "dom2"))) {
 				connection.SendMessage("Chat", format('tampering.warn', sender.VisibleName));
 
+				await wait(2000);
+
 				if (!target) {
 					logger.error(`failed to find target of vibe change message ${JSON.stringify(message)}`);
 				} else {
