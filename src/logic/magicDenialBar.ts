@@ -4,7 +4,7 @@ import _ from "lodash";
 import { format, load, ordinal } from "../magicStrings";
 import { wait } from "../utils";
 import { AdministrationLogic } from "./administrationLogic";
-import { dressLike, dressType, freeCharacter, lookUpTagInChatMessage, reapplyClothing } from "./magicSupport";
+import { dressLike, dressLikeOpts, dressType, freeCharacter, lookUpTagInChatMessage, reapplyClothing } from "./magicSupport";
 
 const permissionCost = 5;
 const punishmentCost = 10;
@@ -280,8 +280,7 @@ export class MagicCharacter {
 
 		this.assignRole();
 		if (this.beingPunished) {
-			this.dressLike("doll");
-			this.dollLock();
+			this.dressLike("doll", { lockType: "CombinationPadlock", lockOpts: { combination: this.lockCode } });
 			this.applyRestraints(true);
 		} else {
 			this.applyRestraints();
@@ -324,14 +323,14 @@ export class MagicCharacter {
 	isDom() { return this.role.includes("dom"); }
 	isSub() { return this.role.includes("sub"); }
 
-	dressLike(type: dressType) {
-		dressLike(this.character, type);
+	dressLike(type: dressType, opts?: dressLikeOpts) {
+		dressLike(this.character, type, opts);
 	}
 
 	applyRestraints(force: boolean = false) {
 		if (!this.isParticipating()) return;
 
-		logger.info(`Applying restraints for ${this.role} to ${this}`);
+		logger.info(`Applying restraints for ${this.role} to ${this}. Lock code is ${this.lockCode}`);
 		let item = null;
 		if (this.role === "sub2") {
 			const buttplug = AssetGet("ItemButt", "VibratingButtplug");
@@ -348,21 +347,8 @@ export class MagicCharacter {
 			item?.SetDifficulty(100);
 			item?.Extended?.SetType("ClosedBack");
 
-			// TODO: locks
-			// InventoryLock(sender, InventoryGet(sender, "ItemPelvis"), { Asset: AssetGet("Female3DCG", "ItemMisc", "CombinationPadlock") })
-			// InventoryGet(sender, "ItemPelvis").Property.CombinationNumber = customerList[sender.MemberNumber].lockCode;
+			item?.AddLock("CombinationPadlock", { combination: this.lockCode });
 		}
-	}
-
-	dollLock() {
-		// TODO: locks
-		// const lock = AssetGet("ItemMisc", "CombinationPadlock");
-		// InventoryLock(sender, InventoryGet(sender, "ItemArms"), { Asset: assetLock })
-		// InventoryGet(sender, "ItemArms").Property.CombinationNumber = customerList[sender.MemberNumber].lockCode;
-		// InventoryLock(sender, InventoryGet(sender, "ItemHead"), { Asset: assetLock })
-		// InventoryGet(sender, "ItemHead").Property.CombinationNumber = customerList[sender.MemberNumber].lockCode;
-		// InventoryLock(sender, InventoryGet(sender, "ItemMouth3"), { Asset: assetLock })
-		// InventoryGet(sender, "ItemMouth3").Property.CombinationNumber = customerList[sender.MemberNumber].lockCode;
 	}
 
 	completeAdulation(target: MagicCharacter, msg: string) {
@@ -481,8 +467,7 @@ export class MagicCharacter {
 	applyPunishment() {
 		if (!this.isParticipating()) return;
 
-		this.dressLike("doll");
-		this.dollLock();
+		this.dressLike("doll", { lockType: "CombinationPadlock", lockOpts: { combination: this.lockCode } });
 		this.applyRestraints(true);
 		this.beingPunished = true;
 		this.rules.add("denial");

@@ -73,10 +73,24 @@ export function dollify(target: API_Character, mustKneel = false, mustStand = fa
 
 export type dressType = "doll" | "talkingDoll" | "maid" | "cow" | "pony" | "kitty" | "puppy" | "trainer" | "mistress";
 
-export function dressLike(target: API_Character, dress: dressType, dressColor = "default", removeUnderwear = true) {
+export type dressLikeOpts = {
+	dressColor?: string;
+	removeUnderwear?: boolean;
+	lockType?: AssetLockType;
+	lockOpts?: API_Lock_Options;
+};
+
+export function dressLike(target: API_Character, dress: dressType, opts?: dressLikeOpts) {
+	let dressColor = opts?.dressColor ?? "Default";
+	const removeUnderwear = opts?.removeUnderwear ?? true;
+	const lockType = opts?.lockType ?? null;
+	const lockOpts = (lockType && opts?.lockOpts) ?? null;
+
 	// TODO: backup appearance
 	memorizeClothing(target);
 	removeClothes(target, removeUnderwear);
+
+	const shouldLock = (lockType && lockOpts);
 
 	// Get the hair color
 	if (dressColor === "hair" || dress === "doll" || dress === "talkingDoll") {
@@ -100,11 +114,14 @@ export function dressLike(target: API_Character, dress: dressType, dressColor = 
 		item?.SetColor(dressColor);
 		item = target.Appearance.AddItem(AssetGet("ItemTorso", "LatexCorset1"));
 		item?.SetColor(dressColor);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 		item = target.Appearance.AddItem(AssetGet("ItemBoots", "ThighHighLatexHeels"));
 		item?.SetColor(dressColor);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 		item = target.Appearance.AddItem(AssetGet("ItemArms", "BoxTieArmbinder"));
 		item?.SetColor(dressColor);
 		item?.SetDifficulty(100);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 		if (dress !== "talkingDoll") {
 			item = target.Appearance.AddItem(AssetGet("ItemMouth", "ClothStuffing"));
 			item?.SetColor(dressColor);
@@ -112,16 +129,20 @@ export function dressLike(target: API_Character, dress: dressType, dressColor = 
 			item?.SetColor(dressColor);
 			item = target.Appearance.AddItem(AssetGet("ItemMouth3", "LatexPostureCollar"));
 			item?.SetColor(dressColor);
+			if (shouldLock) item?.AddLock(lockType, lockOpts);
 		}
 		item = target.Appearance.AddItem(AssetGet("ItemHead", "LatexBlindfold"));
 		item?.SetColor(dressColor);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 		item = target.Appearance.AddItem(AssetGet("ClothLower", "LatexSkirt1"));
 		item?.SetColor(dressColor);
 
 		item = target.Appearance.AddItem(AssetGet("ItemFeet", "SpreaderMetal"));
 		item?.SetColor(dressColor);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 		item = target.Appearance.AddItem(AssetGet("ItemLegs", "LeatherLegCuffs"));
 		item?.SetColor(dressColor);
+		if (shouldLock) item?.AddLock(lockType, lockOpts);
 
 	} else if (dress === "maid") {
 		item = target.Appearance.AddItem(AssetGet("Socks", "Socks5"));
