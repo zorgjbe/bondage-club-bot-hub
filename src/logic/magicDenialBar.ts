@@ -1,6 +1,7 @@
 import { AssetGet, BC_PermissionLevel, logger, VibratorIntensity } from "bondage-club-bot-api";
 
 import { format, load, ordinal } from "../magicStrings";
+import { wait } from "../utils";
 import { AdministrationLogic } from "./administrationLogic";
 import { dressLike, dressType, freeCharacter, lookUpTagInChatMessage, reapplyClothing } from "./magicSupport";
 
@@ -545,7 +546,7 @@ export class MagicDenialBar extends AdministrationLogic {
 		// this.customers.delete(character.MemberNumber);
 	}
 
-	protected onCharacterEntered(connection: API_Connector, character: API_Character): void {
+	protected async onCharacterEntered(connection: API_Connector, character: API_Character): Promise<void> {
 		if (character.IsBot()) return;
 
 		const kickReasons = [];
@@ -591,15 +592,16 @@ export class MagicDenialBar extends AdministrationLogic {
 				// 	return;
 			} else {
 				logger.info(`Kicking ${character}`);
-				setTimeout(() => {
-					void character.Kick();
-				}, 10 * 1000);
+				await wait(10_000);
+				await character.Kick();
 				return;
 			}
 		}
 
 		character.Tell("Emote", format('greetings.entry_1', connection.Player.VisibleName));
 		character.Tell("Emote", format('greetings.entry_2', connection.Player.VisibleName));
+
+		await wait(5_000);
 
 		let customer = this.customers.get(character.MemberNumber);
 		if (customer) {
