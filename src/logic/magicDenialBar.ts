@@ -10,7 +10,11 @@ const punishmentCost = 10;
 const domLv2Cost = 10;
 const adulationCost = 3;
 
+/** The number of strikes that causes punishment to kick in */
 const maxStrikes = 3;
+
+/** The number of times to resist orgasms for punishment to stop */
+const maxResist = 2;
 
 load({
 	greetings: {
@@ -48,7 +52,8 @@ load({
 		begin: "You will now stay like this for a while. Try resisting a couple of orgasms and I may decide to free you again.",
 		end: "Okay %s. I hope you have learned your lesson. You are free now.",
 		no_bot: "Eheh, so you'd like to see me tied up? Soo nice of you. But my Mistress ordered me to manage this place… maybe another time?",
-		bought: "Oh %s, it seems that %s would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles."
+		bought: "Oh %s, it seems that %s would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles.",
+		resist: "Would you look at that! It does seem you have a bit of self-control after all~"
 	},
 	orgasm: {
 		warn: "You had an orgasm without permission, %s. I am kind, but at the %s strike I WILL punish you.",
@@ -62,7 +67,7 @@ load({
 	},
 	dom: {
 		invalid_target: "Sorry, but no points will be awarded to arouse non-submissive girls or girls being punished. Still, feel free to enjoy them!",
-		points_awarded: "*[Points: %d (+%d)]"
+		points_awarded: "*Playing with %s netted you +%d points. Keep it up!"
 	}
 });
 
@@ -83,7 +88,7 @@ RULES:
 - Orgasms are prohibited
 - Messing with the vibrators is prohibited
 You will receive one strike each time you break a rule. After ${maxStrikes} strikes you will be dollified.
-To be released from your dollification predicament you have to demonstrate your obedience resisting 2 orgasms.
+To be released from your dollification predicament you have to demonstrate your obedience resisting ${maxResist} orgasms.
 
 ------------------------------------------------
 SHOP:
@@ -242,6 +247,14 @@ export class MagicCharacter {
 		this.character.Tell("Chat", format('punishment.begin'));
 	}
 
+	liftPunishment() {
+		this.strike = 0;
+		this.beingPunished = false;
+		freeCharacter(this.character);
+		reapplyClothing(this.character);
+		this.applyRestraints();
+	}
+
 	private orgasmReaction() {
 		this.strike += 1;
 		if (this.strike < maxStrikes) {
@@ -253,24 +266,27 @@ export class MagicCharacter {
 		this.applyPunishment();
 	}
 
-	didOrgasm(successfully: boolean) {
-		if (!successfully) {
-			if (this.beingPunished) {
-				this.orgasmResisted += 1;
-				if (this.orgasmResisted >= 2) {
-					this.character.Tell("Chat", format('punishment.end', this.name));
-					this.orgasmResisted = 0;
-					this.strike = 0;
-					this.beingPunished = false;
-					freeCharacter(this.character);
-					reapplyClothing(this.character);
-					this.applyRestraints();
-				}
-			}
-			return;
-		}
+	didResistOrgasm() {
+		if (!this.rules.includes("denial")) return;
 
-		if (this.rules.includes("denial") && !this.beingPunished) {
+		if (this.beingPunished) {
+			this.orgasmResisted += 1;
+
+			if (this.orgasmResisted < maxResist) {
+				this.character.Tell("Chat", format('punishment.resist', this.name));
+				return;
+			}
+
+			this.character.Tell("Chat", format('punishment.end', this.name));
+			this.orgasmResisted = 0;
+			this.liftPunishment();
+		}
+	}
+
+	didOrgasm() {
+		if (!this.rules.includes("denial")) return;
+
+		if (!this.beingPunished) {
 			if (this.allowedOrgasms > 0) {
 				this.allowedOrgasms -= 1;
 				this.character.Tell("Emote", format('orgasm.lost', this.allowedOrgasms));
@@ -620,7 +636,7 @@ export class MagicDenialBar extends AdministrationLogic {
 		}
 	}
 
-	protected onMessage(connection: API_Connector, message: BC_Server_ChatRoomMessage, sender: API_Character): void {
+	protected async onMessage(connection: API_Connector, message: BC_Server_ChatRoomMessage, sender: API_Character): Promise<void> {
 		if (sender.IsBot()) return;
 
 		const customer = this.getActiveCustomer(sender.MemberNumber);
@@ -628,6 +644,7 @@ export class MagicDenialBar extends AdministrationLogic {
 
 		const targetID = lookUpTagInChatMessage(message, "TargetMemberNumber");
 		const target = targetID ? this.getActiveCustomer(targetID as number) : null;
+		logger.info(`recieved message ${message.Content} from ${sender} targetting ${target} (${targetID})`);
 
 		const msg = message.Content;
 		if (message.Type === "Action") {
@@ -652,12 +669,14 @@ export class MagicDenialBar extends AdministrationLogic {
 		} else if (message.Type === "Activity") {
 			logger.info(`Processing activity ${message.Content} from ${customer} to ${target}`);
 
-			if (msg.includes("OrgasmResist")) {
+			if (msg.startsWith("OrgasmResist")) {
 				logger.info(`${sender} resisted her orgasm`);
-				customer.didOrgasm(false);
-			} else if (msg.includes("Orgasm")) {
+				customer.didResistOrgasm();
+				return;
+			} else if (msg.startsWith("Orgasm")) {
 				logger.info(`${sender} failed to resist her orgasm`);
-				customer.didOrgasm(true);
+				customer.didOrgasm();
+				return;
 			}
 
 			if (!target) {
@@ -693,27 +712,31 @@ export class MagicDenialBar extends AdministrationLogic {
 				// Factor = Factor + (PreferenceGetZoneFactor(targetChar, ActivityGroup) * 5) - 10; // The zone used also adds from -10 to +10
 
 				const settings = target.character.ArousalSettings;
-				logger.info(`target ${target} arousal: ${settings?.Progress}, ${settings?.ProgressTimer}`);
+				logger.verbose(`target ${target} arousal: ${settings?.Progress}, ${settings?.ProgressTimer}`);
 				const startProgress = settings?.Progress || 0;
-				const waitTime = Math.max((settings?.ProgressTimer || 0) * 1000, 5000);
+				const waitTime = Math.max((settings?.ProgressTimer || 0) * 1000, 8000);
 
-				logger.info(`${customer} activity, scheduling arousal check in ${waitTime}`);
-				setTimeout(() => {
-					const stopSettings = target.character.ArousalSettings;
-					const endProgress = stopSettings?.Progress || 0;
-					logger.info(`target ${target} arousal: ${stopSettings?.Progress}, ${stopSettings?.ProgressTimer}`);
-					const progressMade = Math.floor((endProgress - startProgress) / 10);
-					if (progressMade <= 0) {
-						logger.info(`${customer} activity, no progress made on ${target}! ${startProgress} → ${endProgress}`);
-						return;
-					}
+				logger.verbose(`${customer} activity, scheduling arousal check in ${waitTime}`);
 
-					const pointsGained = Math.min(progressMade, 0) + 1;
-					customer.points += pointsGained;
-					sender.Tell("Emote", format('dom.points_awarded', customer.points, pointsGained));
-					logger.info(`${sender} gained ${pointsGained} points`);
+				await wait(waitTime);
 
-				}, waitTime);
+				const stopSettings = target.character.ArousalSettings;
+				const endProgress = stopSettings?.Progress || startProgress;
+				logger.verbose(`target ${target} arousal: ${stopSettings?.Progress}, ${stopSettings?.ProgressTimer}`);
+				const progressMade = endProgress - startProgress;
+				if (progressMade <= 0) {
+					logger.info(`${customer} activity, no progress made on ${target}! ${startProgress} → ${endProgress}`);
+					return;
+				}
+
+				logger.verbose(`${customer} activity made ${target} arousal change by ${progressMade}, awarding points`);
+
+				const pointsGained = Math.max(Math.floor(progressMade / 10), 0) + 1;
+				customer.points += pointsGained;
+
+				sender.Tell("Emote", format('dom.points_awarded', target.name, pointsGained));
+				logger.info(`${sender} gained ${pointsGained} points`);
+
 			} else if (customer.isSub()) {
 				if (!("adulation" in customer.orders))
 					return;
