@@ -352,7 +352,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 
 			if (!target || !role) {
-				customer.character.Tell("Whisper", "!su role [member] [sub1|sub2|dom|dom2]");
+				customer.character.Tell("Whisper", "Missing target and/or role: !su role [member] [sub1|sub2|dom|dom2]");
 				return;
 			}
 
@@ -374,7 +374,7 @@ export class MagicDenialBar extends AdministrationLogic {
 
 			const arg = args.shift();
 			if (!arg) {
-				customer.character.Tell("Whisper", "!su points [amount]");
+				customer.character.Tell("Whisper", "Missing amount of points: !su points [amount]");
 				return;
 			}
 
