@@ -1,4 +1,5 @@
 import { AssetGet, BC_PermissionLevel, logger, VibratorIntensity } from "bondage-club-bot-api";
+import _ from "lodash";
 
 import { format, load, ordinal } from "../magicStrings";
 import { wait } from "../utils";
@@ -40,10 +41,12 @@ load({
 	adulation: {
 		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you, %s.",
 		order: {
-			kiss: "ORDER: Kiss %s's feet or you will receive one strike."
+			kiss: "ORDER: Kiss %s's feet or you will receive one strike.",
+			massage: "ORDER: Massage %s's back or you will receive one strike."
 		},
 		success: {
-			kiss: "You did good, %s."
+			kiss: "You did good, %s.",
+			massage: "Well done, %s. I bet she liked this~"
 		},
 		bought: "%s will take care of that. %s points remainining."
 	},
@@ -120,8 +123,9 @@ Following commands are for dommes only.
 type MagicCharacterRole = "sub1" | "sub2" | "dom" | "dom2" | "";
 type MagicOrders = {
 	"adulation"?: {
-		timeoutHandle: NodeJS.Timeout;
-		adulationTarget: number;
+		type: string;
+		handle: NodeJS.Timeout;
+		target: number;
 	}
 };
 export class MagicCharacter {
@@ -277,8 +281,10 @@ export class MagicCharacter {
 	}
 
 	adulate(target: MagicCharacter) {
-		this.orders = { "adulation": { timeoutHandle: setTimeout(this.adulationCheck.bind(this), 5 * 60 * 1000), adulationTarget: target.MemberNumber } };
-		this.character.Tell("Whisper", format('adulation.order.kiss', target.name));
+		const type = _.sample(["kiss", "massage"]) as string;
+
+		this.orders = { "adulation": { type, handle: setTimeout(this.adulationCheck.bind(this), 5 * 60 * 1000), target: target.MemberNumber } };
+		this.character.Tell("Whisper", format(`adulation.order.${type}`, target.name));
 	}
 
 	giveStrike() {
@@ -833,16 +839,30 @@ export class MagicDenialBar extends AdministrationLogic {
 				logger.info(`${sender} gained ${pointsGained} points`);
 
 			} else if (customer.isSub()) {
-				if (!("adulation" in customer.orders))
-					return;
+				if (!msg.includes("ChatOther")) return;
 
-				if (msg.includes("ChatOther") && msg.includes("Kiss") && (msg.includes("ItemBoots") || msg.includes("ItemFeet"))) {
-					if (targetID === customer.orders.adulation?.adulationTarget) {
-						logger.info(`${sender} performed adulation on ${target}`);
-						sender.Tell("Whisper", format('adulation.success.kiss', sender.VisibleName));
-						clearTimeout(customer.orders.adulation?.timeoutHandle);
-						delete customer.orders.adulation;
-					}
+				const adulationData = customer.orders.adulation;
+				if (!adulationData) return;
+
+				if (targetID !== customer.orders.adulation?.target) return;
+
+				let success = false;
+				switch (adulationData.type) {
+					case "kiss":
+						success = msg.includes("Kiss") && (msg.includes("ItemBoots") || msg.includes("ItemFeet"));
+						break;
+
+					case "massage":
+						success = msg.includes("Massage") && (msg.includes("ItemTorso"));
+						break;
+				}
+
+				if (success) {
+					logger.info(`${sender} performed adulation on ${target}`);
+					sender.Tell("Whisper", format(`adulation.success.${adulationData.type}`, sender.VisibleName));
+
+					clearTimeout(customer.orders.adulation?.handle);
+					delete customer.orders.adulation;
 				}
 			}
 		}
