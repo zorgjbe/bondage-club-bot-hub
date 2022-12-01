@@ -38,7 +38,7 @@ load({
 		]
 	},
 	adulation: {
-		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you.",
+		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you, %s.",
 		order: {
 			kiss: "ORDER: Kiss %s's feet or you will receive one strike."
 		},
@@ -52,36 +52,36 @@ load({
 		begin: "You will now stay like this for a while. Try resisting a couple of orgasms and I may decide to free you again.",
 		end: "Okay %s. I hope you have learned your lesson. You are free now.",
 		no_bot: "Eheh, so you'd like to see me tied up? Soo nice of you. But my Mistress ordered me to manage this place… maybe another time?",
-		bought: "Oh %s, it seems that %s would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles.",
-		resist: "Would you look at that! It does seem you have a bit of self-control after all~"
+		bought: "Oh %s, it seems that %s would really enjoy to see you in our punishment outfit. And since she is a paying customer… Let her enjoy your struggles~",
+		resist: "Would you look at that! It does seem you have a bit of self-control after all, %s~"
 	},
 	orgasm: {
 		warn: "You had an orgasm without permission, %s. I am kind, but at the %s strike I WILL punish you.",
 		punish: "%s, you had an orgasm without permission, again. You need to be punished.",
 		lost: `*[One orgasm permission used. Orgasm permission remaining: %d]`,
-		bought: "*%s has bought an orgasm permission for you. You have now %d permissions."
+		bought: "*%s has bought an orgasm permission for you. You have now %d orgasms allowed."
 	},
 	tampering: {
 		warn: "%s! Do not mess with the vibrators, you are not allowed to do that. This is a strike for you!",
 		reset: "*The vibrator automatically returns to the initial setting."
 	},
 	dom: {
-		invalid_target: "Sorry, but no points will be awarded to arouse non-submissive girls or girls being punished. Still, feel free to enjoy them!",
+		invalid_target: "Sorry, but no points will be awarded by playing with dominant girls or if they're being punished. Still, feel free to enjoy them!",
 		points_awarded: "*Playing with %s netted you +%d points. Keep it up!"
 	}
 });
 
-const botDescription = `Welcome to the MAGIC DENIAL BAR
+const botDescription = `Welcome to the MAGIC DENIAL BAR !
 
 FOR SUBMISSIVE CUSTOMERS:
 To all our subs customer we provide a free vibrating dildo and chastity belt upon entering.
-Those that demonstrate to have solid submissive history will also receive a complementary anal vibrator!
-Just remember that in our establishment you are prohibited to have orgasms, unless properly authorized by one of our mistress customers.
-Trasgressors will be harshly punished.
+Those that demonstrate a solid submissive history will also receive a complementary anal vibrator!
+Just remember that in our establishment you are prohibited to ever orgasm, unless explicitly authorized by one of our mistress customers.
+Transgressors will be harshly punished.
 
 FOR DOMINANT CUSTOMERS:
-Our naive submissive dol- customers are here for your pleasure. Play with them, tease them and make them beg for your own amusing!
-The more you arouse them the more credit (points) you will receive.
+Our n̶a̶i̶v̶e̶ ̶s̶u̶b̶m̶i̶s̶s̶i̶v̶e̶ ̶d̶o̶l̶customers are here for your pleasure. Play with them, tease them and make them beg for your own amusement!
+The more you arouse them the more points you will receive.
 Use your hard earned points to buy new items to tease and reward your favorite play toy.
 
 RULES:
@@ -96,6 +96,7 @@ In the shop you will be able to buy the following items:
 - Orgasm permission (${permissionCost} points): give this permission to whoever you want (yourself included) to allow them to have a nice orgasm! A nice reward for a good girl.
 - DomLv2 (${domLv2Cost} points): upgrade your status inside this bar, you will be given the authority to change the vibrators settings as you wish. But remember: turning them off is always prohibited!
 - Adulation (${adulationCost} points): we want you to feel appreciated while you are here. You will get some lovely attentions.
+- Punishment (${punishmentCost} points): applies our doll outfit to a girl of your choosing.
 
 ------------------------------------------------
 COMMANDS: all commands must be whispered.
@@ -103,12 +104,13 @@ COMMANDS: all commands must be whispered.
 !leave - you will be freed and kicked out of the room.
 
 Following commands are for dommes only.
-!point - check how many points you have.
+!points - check how many points you have.
 !shop - identical to !buy, read below.
 !buy - look at the available items in the shop.
 !buy permission <name> - buy a permission for <name>
 !buy DomLv2 - upgrade your status in the room.
 !buy adulation - someone will make you feel appreciated.
+!buy punishment <name> - punish <name> by turning them into a doll.
 `;
 
 
@@ -491,7 +493,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				customer.points -= punishmentCost;
 				sender.Tell("Emote", `*Punishment bought. Points remaining: ${customer.points}`);
 
-				target.Tell("Chat", format('punishment.bought', targetCustomer.name));
+				target.Tell("Chat", format('punishment.bought', targetCustomer.name, customer.name));
 				targetCustomer.applyPunishment();
 
 			}
@@ -524,7 +526,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				break;
 
 			case "domlv2":
-				if (customer.role === "dom") {
+				if (customer.isDom()) {
 					if (customer.points < domLv2Cost) {
 						sender.Tell("Whisper", `You need ${domLv2Cost} points, and you only have ${customer.points}.`);
 						return;
@@ -542,15 +544,17 @@ export class MagicDenialBar extends AdministrationLogic {
 			// eslint-disable-next-line no-fallthrough
 			default: {
 				const mess = [];
-				mess.push("To buy an item say '!buy <item>. Here is a list of available items:");
+				mess.push(`You have ${customer.points} points at the moment. Here is a list of available items:`);
 				mess.push("-----------------------------------");
 				mess.push(`Permission (${permissionCost} pt)`);
 				mess.push(`Adulation (${adulationCost} pt)`);
+				mess.push(`Punishment (${punishmentCost} pt)`);
 
 				if (customer.role === "dom") {
 					mess.push(`DomLv2 (change vibrator settings) (${domLv2Cost} pt)`);
 				}
 				mess.push("-----------------------------------");
+				mess.push("To buy an item say '!buy <item>.");
 
 				sender.Tell("Whisper", mess.join("\n"));
 			}
