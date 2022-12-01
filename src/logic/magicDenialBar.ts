@@ -124,7 +124,7 @@ type MagicOrders = {
 export class MagicCharacter {
 	readonly character: API_Character;
 	role: MagicCharacterRole = "";
-	points = 0;
+	_points = 0;
 	totalPointsGained = 0;
 	lockCode = Math.floor(Math.random() * 9000 + 1000).toString();
 	strike = 0;
@@ -153,6 +153,20 @@ export class MagicCharacter {
 		return this.character.MemberNumber;
 	}
 
+	public get points(): number {
+		return this._points;
+	}
+
+	public set points(p: number) {
+		this._points = p;
+	}
+
+	public changePoints(pointDiff: number) {
+		pointDiff = Math.round(pointDiff);
+		this._points = Math.max(0, this._points + pointDiff);
+		if (pointDiff > 0)
+			this.totalPointsGained += pointDiff;
+	}
 
 	toString() {
 		return `${this.character}`;
@@ -399,7 +413,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			const amount = parseInt(arg, 10);
 
 			customer.character.Tell("Whisper", `Added ${amount} points`);
-			customer.points += amount;
+			customer.changePoints(amount);
 		});
 
 		this.registerSUCommand("strike", (connection, args, sender) => {
@@ -453,7 +467,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 
 				logger.info(`${customer} bought permission for ${targetCustomer}.`);
-				customer.points -= permissionCost;
+				customer.changePoints(-permissionCost);
 				sender.Tell("Emote", `*Permission bought. Points remaining: ${customer.points}`);
 
 				targetCustomer.allowedOrgasms += 1;
@@ -490,7 +504,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 
 				logger.info(`${customer} bought punishment for ${targetCustomer}.`);
-				customer.points -= punishmentCost;
+				customer.changePoints(-punishmentCost);
 				sender.Tell("Emote", `*Punishment bought. Points remaining: ${customer.points}`);
 
 				target.Tell("Chat", format('punishment.bought', targetCustomer.name, customer.name));
@@ -517,7 +531,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 
 				const targetSub = subList[Math.floor(Math.random() * subList.length)];
-				customer.points -= adulationCost;
+				customer.changePoints(-adulationCost);
 				logger.info(`${sender} bought adulation from ${targetSub.name}`);
 
 				sender.Tell("Whisper", format('adulation.bought', targetSub.name, customer.points));
@@ -533,7 +547,7 @@ export class MagicDenialBar extends AdministrationLogic {
 					}
 
 					logger.info(`${sender} bought DomLv2.`);
-					customer.points -= domLv2Cost;
+					customer.changePoints(-domLv2Cost);
 					sender.Tell("Emote", `*Level up bought. Points remaining: ${customer.points}`);
 
 					customer.role = "dom2";
@@ -736,7 +750,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				logger.verbose(`${customer} activity made ${target} arousal change by ${progressMade}, awarding points`);
 
 				const pointsGained = Math.max(Math.floor(progressMade / 10), 0) + 1;
-				customer.points += pointsGained;
+				customer.changePoints(pointsGained);
 
 				sender.Tell("Emote", format('dom.points_awarded', target.name, pointsGained));
 				logger.info(`${sender} gained ${pointsGained} points`);
