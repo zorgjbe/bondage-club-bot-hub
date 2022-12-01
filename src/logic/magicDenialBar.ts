@@ -68,6 +68,10 @@ load({
 	dom: {
 		invalid_target: "Sorry, but no points will be awarded by playing with dominant girls or if they're being punished. Still, feel free to enjoy them!",
 		points_awarded: "*Playing with %s netted you +%d points. Keep it up!"
+	},
+	vibes: {
+		increase: "Hehe~ I see you're not enjoying yourself as much as I thought. Here's some motivation for you!",
+		decrease: "Here, let me turn those toys down a bit…"
 	}
 });
 
@@ -131,9 +135,9 @@ export class MagicCharacter {
 	beingPunished = false;
 	orgasmResisted = 0;
 	allowedOrgasms = 0;
-	buttIntensity = VibratorIntensity.LOW;
-	vulvaIntensity = VibratorIntensity.LOW;
+	_vibesIntensity = VibratorIntensity.LOW;
 	lastActivity = 0;
+	lastOrgasmTime = 0;
 	rules: string[] = [];
 	orders: MagicOrders = {};
 
@@ -166,6 +170,37 @@ export class MagicCharacter {
 		this._points = Math.max(0, this._points + pointDiff);
 		if (pointDiff > 0)
 			this.totalPointsGained += pointDiff;
+	}
+
+	public get vibesIntensity(): VibratorIntensity {
+		return this._vibesIntensity;
+	}
+
+	public set vibesIntensity(v: VibratorIntensity) {
+		// Cap the intensity. If denial is enabled, never allow them to be stopped
+		if (this._vibesIntensity >= VibratorIntensity.MAXIMUM) return;
+		if (this._vibesIntensity <= (this.rules.includes("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF)) return;
+
+		const increase = v > this._vibesIntensity;
+		this._vibesIntensity = v;
+
+		// Update all vibes
+		let changed = false;
+		for (const group of ["ItemBreasts", "ItemVulva", "ItemButt"]) {
+			const item = this.character.Appearance.InventoryGet(group);
+			if (!item) continue;
+
+			if (item.Vibrator?.Intensity !== this._vibesIntensity) {
+				item.Vibrator?.SetIntensity(this._vibesIntensity, false);
+				changed = true;
+			}
+		}
+		if (changed) {
+			if (increase)
+				this.character.Tell("Whisper", format("vibes.increase", this.name));
+			else
+				this.character.Tell("Whisper", format("vibes.decrease", this.name));
+		}
 	}
 
 	toString() {
@@ -201,12 +236,12 @@ export class MagicCharacter {
 		if (this.role === "sub2") {
 			const buttplug = AssetGet("ItemButt", "VibratingButtplug");
 			item = this.character.Appearance.AddItem(buttplug);
-			item?.Vibrator?.SetIntensity(this.buttIntensity, false);
+			item?.Vibrator?.SetIntensity(this.vibesIntensity, false);
 		}
 		if (this.isSub() || force) {
 			const dildo = AssetGet("ItemVulva", "VibratingDildo");
 			item = this.character.Appearance.AddItem(dildo);
-			item?.Vibrator?.SetIntensity(this.vulvaIntensity, false);
+			item?.Vibrator?.SetIntensity(this.vibesIntensity, false);
 
 			const belt = AssetGet("ItemPelvis", "PolishedChastityBelt");
 			item = this.character.Appearance.AddItem(belt);
@@ -285,6 +320,9 @@ export class MagicCharacter {
 	didResistOrgasm() {
 		if (!this.rules.includes("denial")) return;
 
+		this.lastOrgasmTime = Date.now();
+		this.vibesIntensity = VibratorIntensity.LOW;
+
 		if (this.beingPunished) {
 			this.orgasmResisted += 1;
 
@@ -301,6 +339,9 @@ export class MagicCharacter {
 
 	didOrgasm() {
 		if (!this.rules.includes("denial")) return;
+
+		this.lastOrgasmTime = Date.now();
+		this.vibesIntensity = VibratorIntensity.LOW;
 
 		if (!this.beingPunished) {
 			if (this.allowedOrgasms > 0) {
@@ -326,6 +367,8 @@ export class MagicDenialBar extends AdministrationLogic {
 		this.connection.Player.SetDescription(botDescription);
 		this.connection.Player.SetInvisible(false);
 		this.registerCommands();
+
+		setInterval(this.update.bind(this), 10_000);
 	}
 
 	resetRoom() {
@@ -340,6 +383,16 @@ export class MagicDenialBar extends AdministrationLogic {
 			return null;
 
 		return customer;
+	}
+
+	update() {
+		for (const [_n, character] of this.customers) {
+			void _n;
+			if (character.isSub() && Math.abs(Date.now() - character.lastOrgasmTime) > 3 * 60 * 1000) {
+				// It's been a while since they haven't orgasmed, bump the vibes up
+				character.vibesIntensity++;
+			}
+		}
 	}
 
 	registerCommands() {
@@ -676,9 +729,9 @@ export class MagicDenialBar extends AdministrationLogic {
 					logger.error(`failed to find target of vibe change message ${JSON.stringify(message)}`);
 				} else {
 					const dildoAsset = target.character.Appearance.InventoryGet("ItemVulva");
-					dildoAsset?.Vibrator?.SetIntensity(target.vulvaIntensity, false);
+					dildoAsset?.Vibrator?.SetIntensity(target.vibesIntensity, false);
 					const buttAsset = target.character.Appearance.InventoryGet("ItemButt");
-					buttAsset?.Vibrator?.SetIntensity(target.buttIntensity, false);
+					buttAsset?.Vibrator?.SetIntensity(target.vibesIntensity, false);
 				}
 				connection.SendMessage("Emote", format('tampering.reset'));
 
