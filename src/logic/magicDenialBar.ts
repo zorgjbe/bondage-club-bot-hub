@@ -708,10 +708,10 @@ export class MagicDenialBar extends AdministrationLogic {
 		}, "Get freed and leave the room");
 
 		this.registerCommand("status", this.onStatusCommand.bind(this), "Check your current status.");
-		this.registerCommand("points", this.onStatusCommand.bind(this));
+		this.registerCommand("points", this.onStatusCommand.bind(this), null);
 
 		this.registerCommandParsed("buy", this.onBuyCommand.bind(this), "Buy items from the shop");
-		this.registerCommandParsed("shop", this.onBuyCommand.bind(this));
+		this.registerCommandParsed("shop", this.onBuyCommand.bind(this), null);
 
 		this.registerSUCommand("role", (connection, args, sender) => {
 			const customer = this.customers.get(sender);
