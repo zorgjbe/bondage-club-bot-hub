@@ -52,6 +52,7 @@ load({
 	},
 	adulation: {
 		failed: "I asked you something extremely easy and you were not able to do it, %s. %s",
+		target_left: "Aww, it seems she's not here anymore. Nevermind then…",
 		order: {
 			kiss: "ORDER: Kiss %s's feet.",
 			massage: "ORDER: Massage %s's back."
@@ -405,6 +406,16 @@ export class MagicCharacter {
 		delete this.orders.adulation;
 	}
 
+	cancelAdulation() {
+		const data = this.orders.adulation;
+		if (!data) return;
+
+		this.character.Tell("Whisper", format('adulation.target_left'));
+
+		clearTimeout(data.handle);
+		delete this.orders.adulation;
+	}
+
 	adulate(target: MagicCharacter, proposeReward?: MagicReward) {
 		if (!this.isParticipating() || !this.isSub()) return;
 
@@ -551,14 +562,21 @@ export class MagicDenialBar extends AdministrationLogic {
 		}
 	}
 
+	isInRoom(character: API_Character | MagicCharacter | number) {
+		let memberNum: number;
+		if (typeof character !== "number") {
+			memberNum = character.MemberNumber;
+		} else
+			memberNum = character;
+
+		return this.connection.chatRoom.characters.find(c => c.MemberNumber === memberNum);
+	}
+
 	getActiveCustomer(memberNumber: number) {
 		const customer = this.customers.get(memberNumber);
 		if (!customer) return null;
 
-		if (!customer.participating) return null;
-
-		if (!this.connection.chatRoom.characters.includes(customer.character))
-			return null;
+		if (!customer.isParticipating() || !this.isInRoom(customer.character)) return null;
 
 		return customer;
 	}
@@ -566,6 +584,9 @@ export class MagicDenialBar extends AdministrationLogic {
 	update() {
 		if (this.connection.Player.ChatRoomPosition !== 0)
 			void this.connection.Player.MoveToPos(0);
+
+		// Cleanup leftover adulations
+		this.checkAdulationConsistency();
 
 		// Bump the vibes up for anyone that hasn't orgasmed in a while
 		this.customers.forEach((character) => {
@@ -591,10 +612,24 @@ export class MagicDenialBar extends AdministrationLogic {
 		const subList = [];
 		for (const [idx, potentialTarget] of this.customers) {
 			void idx;
-			if (potentialTarget.isParticipating() && potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
+			if (!potentialTarget.isParticipating() || !this.isInRoom(potentialTarget.character))
+				continue;
+
+			if (potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
 				subList.push(potentialTarget);
 		}
 		return subList;
+	}
+
+	checkAdulationConsistency() {
+		this.customers.forEach(customer => {
+			const data = customer.orders.adulation;
+			if (data) {
+				if (!this.isInRoom(data.target)) {
+					customer.cancelAdulation();
+				}
+			}
+		});
 	}
 
 	registerCommands() {
@@ -930,7 +965,7 @@ export class MagicDenialBar extends AdministrationLogic {
 	}
 
 	protected onCharacterLeft(connection: API_Connector, character: API_Character, intentional: boolean): void {
-		// this.customers.delete(character.MemberNumber);
+		this.checkAdulationConsistency();
 	}
 
 	protected onCharacterEntered(connection: API_Connector, character: API_Character): void {
