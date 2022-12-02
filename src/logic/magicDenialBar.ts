@@ -733,13 +733,7 @@ export class MagicDenialBar extends AdministrationLogic {
 			logger.info(`${customer} asked to leave`);
 			sender.Tell("Chat", "Sure, let me get you out of those restraints!");
 
-			customer.participating = false;
-
-			freeCharacter(sender);
-			sender.Appearance.RemoveItem("ItemPelvis");
-			sender.Appearance.RemoveItem("ItemVulva");
-			sender.Appearance.RemoveItem("ItemButt");
-
+			customer.releaseCompletely();
 		}, "Get freed and leave the room");
 
 		this.registerCommand("status", this.onStatusCommand.bind(this), "Check your current status.");
@@ -854,6 +848,16 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 
 			sender.Tell("Whisper", msg.join("\n"));
+		});
+
+
+		this.registerSUCommand("reset", (connection, args, senderNum) => {
+			connection.SendMessage("Chat", "The bot is being reset, releasing everyone");
+
+			for (const [_n, customer] of this.customers) {
+				customer.releaseCompletely();
+			}
+			this.resetRoom();
 		});
 	}
 
