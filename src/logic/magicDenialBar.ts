@@ -645,8 +645,6 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 
 			const itemsNeeded = [
-				["ItemDevices", "SmallWoodenBox"],
-				["ItemDevices", "LowCage"],
 				["ItemArms", "BoxTieArmbinder"],
 				["ItemMouth", "ClothStuffing"],
 				["ItemMouth2", "HarnessPanelGag"],
