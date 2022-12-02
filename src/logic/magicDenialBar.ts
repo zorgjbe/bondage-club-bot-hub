@@ -377,6 +377,10 @@ export class MagicCharacter {
 				this.allowedOrgasms += 1;
 				break;
 
+			case "lower_vibes":
+				this.vibesIntensity--;
+				break;
+
 			default:
 				break;
 		}
