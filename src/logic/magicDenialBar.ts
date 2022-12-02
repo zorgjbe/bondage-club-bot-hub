@@ -1043,6 +1043,12 @@ export class MagicDenialBar extends AdministrationLogic {
 				// let ActivityName = lookUpTagInChatMessage<string>(message, "ActivityName");
 				// let ActivityGroup = lookUpTagInChatMessage<string>(message, "ActivityGroup");
 
+				// Ignore actions on self
+				if (target.MemberNumber === customer.MemberNumber) {
+					logger.verbose(`Ignoring dom activity on self`);
+					return;
+				}
+
 				if (target.beingPunished || !target.isSub()) {
 					sender.Tell("Whisper", format('dom.invalid_target'));
 					return;
