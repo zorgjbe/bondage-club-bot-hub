@@ -494,6 +494,9 @@ export class MagicDenialBar extends AdministrationLogic {
 	}
 
 	update() {
+		if (this.connection.Player.ChatRoomPosition !== 0)
+			void this.connection.Player.MoveToPos(0);
+
 		// Bump the vibes up for anyone that hasn't orgasmed in a while
 		this.customers.forEach((character) => {
 			if (character.isSub() && !character.hasOrgasmedRecently())
