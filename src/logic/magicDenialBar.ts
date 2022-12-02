@@ -129,7 +129,7 @@ type MagicOrders = {
 	}
 };
 export class MagicCharacter {
-	readonly character: API_Character;
+	character: API_Character;
 	role: MagicCharacterRole = "";
 	_points = 0;
 	totalPointsGained = 0;
@@ -720,6 +720,8 @@ export class MagicDenialBar extends AdministrationLogic {
 
 		let customer = this.customers.get(character.MemberNumber);
 		if (customer) {
+			customer.character = character;
+
 			character.Tell("Chat", format('greetings.known', character.VisibleName));
 
 			if (customer.beingPunished) {
