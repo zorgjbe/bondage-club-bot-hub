@@ -28,8 +28,11 @@ const maxResist = 2;
 
 load({
 	greetings: {
-		entry_1: "*[Welcome to the Denial Bar, where orgasms are prohibited. More info in %s's Bio. Please READ IT!]",
-		entry_2: "*[Whisper '!leave' to %s and all the locks on you will be unlocked, but you will also be kicked out.]",
+		entry: "*[Welcome to the Denial Bar, where orgasms are prohibited!]\n"
+			+ "\n"
+			+ "You can find more info in %s's Bio. Please READ IT!\n"
+			+ "\n"
+			+ "Whisper '!join' to give consent to the bot to play with you. Afterward, whisper '!leave' and you'll be released.",
 		known: [
 			"Welcome back %s. Don't worry I didn't forget about you. Hihihi~",
 			"Oh %s, you came back~. Well, you know what's going on around here!"
@@ -39,8 +42,8 @@ load({
 			"Greetings %s, welcome to my special shop. You have now the possiblity to earn !points by… arousing other girls here. Then you will be able to use those point to !buy some of our particular offers. Just remember that I will not award any points if you rush too much, so take the time to play and arouse these nice girls~"
 		],
 		sub: [
-			"%s, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you~",
-			"Here's a dildo and chastity belt for you, %s. And don't forget, no cumming!~"
+			"Hello %s, a dildo and a chastity belt have been locked on you, have fun! But not too much or I will punish you~",
+			"Hi!~ Here's a dildo and chastity belt for you, %s. And don't forget, no cumming!~"
 		],
 		very_sub: [
 			"Also, since you seems very submissive to me, I have decided to give you something else you may appreciate. A second vibrating dildo. Hihihi~",
@@ -159,6 +162,7 @@ type MagicOrders = {
 };
 export class MagicCharacter {
 	character: API_Character;
+	participating = false;
 	role: MagicCharacterRole = "";
 	_points = 0;
 	totalPointsGained = 0;
@@ -175,9 +179,6 @@ export class MagicCharacter {
 
 	constructor(char: API_Character) {
 		this.character = char;
-
-		this.assignRole();
-		this.applyRestraints();
 	}
 
 	public get name(): string {
@@ -186,6 +187,10 @@ export class MagicCharacter {
 
 	public get MemberNumber(): number {
 		return this.character.MemberNumber;
+	}
+
+	isParticipating() {
+		return this.participating;
 	}
 
 	public get points(): number {
@@ -208,6 +213,8 @@ export class MagicCharacter {
 	}
 
 	public set vibesIntensity(v: VibratorIntensity) {
+		if (!this.isParticipating()) return;
+
 		// Cap the intensity. If denial is enabled, never allow them to be stopped
 		if (v > VibratorIntensity.MAXIMUM) v = VibratorIntensity.MAXIMUM;
 		const min = (this.rules.includes("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF);
@@ -223,9 +230,9 @@ export class MagicCharacter {
 		logger.debug(`found vibes ${vibes.length}, org: ${orgIntensity}, new: ${this._vibesIntensity}`);
 
 		if (orgIntensity < this._vibesIntensity)
-			this.character.Tell("Whisper", format("vibes.increase"));
+			this.character.Tell("Chat", format("vibes.increase"));
 		else if (orgIntensity > this._vibesIntensity)
-			this.character.Tell("Whisper", format("vibes.decrease"));
+			this.character.Tell("Chat", format("vibes.decrease"));
 
 		for (const item of vibes) {
 			if (!item) continue;
@@ -246,7 +253,22 @@ export class MagicCharacter {
 		return `${this.character}`;
 	}
 
+	refresh(character?: API_Character) {
+		if (character)
+			this.character = character;
+
+		this.assignRole();
+		if (this.beingPunished) {
+			this.dressLike("doll");
+			this.dollLock();
+			this.applyRestraints(true);
+		} else {
+			this.applyRestraints();
+		}
+	}
+
 	assignRole() {
+		if (this.role) return;
 
 		if (this.character.Reputation.Dominant >= 50) {
 			this.character.Tell("Chat", format('greetings.dom', this.name));
@@ -273,6 +295,8 @@ export class MagicCharacter {
 	}
 
 	applyRestraints(force: boolean = false) {
+		if (!this.isParticipating()) return;
+
 		logger.info(`Applying restraints for ${this.role} to ${this}`);
 		let item = null;
 		if (this.role === "sub2") {
@@ -371,6 +395,8 @@ export class MagicCharacter {
 	}
 
 	adulate(target: MagicCharacter, proposeReward?: MagicReward) {
+		if (!this.isParticipating() || !this.isSub()) return;
+
 		const orders: MagicOrderType[] = [];
 		orders.push("kiss");
 
@@ -395,6 +421,8 @@ export class MagicCharacter {
 	}
 
 	giveStrike() {
+		if (!this.isParticipating() || !this.isSub()) return;
+
 		this.strike += 1;
 		if (this.strike >= maxStrikes) {
 			this.character.Tell("Whisper", format("punishment.too_many_strikes", maxStrikes));
@@ -403,6 +431,8 @@ export class MagicCharacter {
 	}
 
 	applyPunishment() {
+		if (!this.isParticipating() || !this.isSub()) return;
+
 		this.dressLike("doll");
 		this.dollLock();
 		this.applyRestraints(true);
@@ -411,6 +441,8 @@ export class MagicCharacter {
 	}
 
 	liftPunishment() {
+		if (!this.isParticipating()) return;
+
 		this.strike = 0;
 		this.beingPunished = false;
 		freeCharacter(this.character);
@@ -436,7 +468,7 @@ export class MagicCharacter {
 	}
 
 	didResistOrgasm() {
-		if (!this.rules.includes("denial")) return;
+		if (!this.isParticipating() || !this.rules.includes("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
 		this.vibesIntensity = VibratorIntensity.LOW;
@@ -456,7 +488,7 @@ export class MagicCharacter {
 	}
 
 	didOrgasm() {
-		if (!this.rules.includes("denial")) return;
+		if (!this.isParticipating() || !this.rules.includes("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
 		this.vibesIntensity = VibratorIntensity.LOW;
@@ -491,11 +523,28 @@ export class MagicDenialBar extends AdministrationLogic {
 
 	resetRoom() {
 		this.customers = new Map();
+		for (const character of this.connection.chatRoom.characters) {
+			this.addToRoom(character);
+		}
+	}
+
+	addToRoom(character: API_Character) {
+		let customer = this.customers.get(character.MemberNumber);
+		if (customer) {
+			character.Tell("Chat", format('greetings.known', character.VisibleName));
+
+			customer.refresh(character);
+		} else {
+			customer = new MagicCharacter(character);
+			this.customers.set(character.MemberNumber, customer);
+		}
 	}
 
 	getActiveCustomer(memberNumber: number) {
 		const customer = this.customers.get(memberNumber);
 		if (!customer) return null;
+
+		if (!customer.participating) return null;
 
 		if (!this.connection.chatRoom.characters.includes(customer.character))
 			return null;
@@ -531,19 +580,76 @@ export class MagicDenialBar extends AdministrationLogic {
 		const subList = [];
 		for (const [idx, potentialTarget] of this.customers) {
 			void idx;
-			if (potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
+			if (potentialTarget.isParticipating() && potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
 				subList.push(potentialTarget);
 		}
 		return subList;
 	}
 
 	registerCommands() {
+		this.registerCommand("join", (connection, args, sender) => {
+			const invalidReasons = [];
+			if (sender.ItemPermission > BC_PermissionLevel.OwnerLoverWhitelistDominant) {
+				logger.info(`${sender}): ${sender.ItemPermission}`);
+				invalidReasons.push("Whitelist too high");
+			}
+
+			const itemsNeeded = [
+				["ItemDevices", "SmallWoodenBox"],
+				["ItemDevices", "LowCage"],
+				["ItemArms", "BoxTieArmbinder"],
+				["ItemMouth", "ClothStuffing"],
+				["ItemMouth2", "HarnessPanelGag"],
+				["ItemMouth3", "LatexPostureCollar"],
+				["ItemHead", "LatexBlindfold"],
+				["ItemFeet", "SpreaderMetal"],
+				["ItemPelvis", "PolishedChastityBelt"],
+				["ItemVulva", "VibratingDildo"]
+			];
+
+			for (const needed of itemsNeeded) {
+				const asset = AssetGet(needed[0] as AssetGroupName, needed[1]);
+				if (!sender.IsItemPermissionAccessible(asset)) {
+					logger.info(`${sender}): missing ${needed[0]}:${needed[1]}`);
+					invalidReasons.push(`Needs access to ${asset.DynamicDescription(sender)}`);
+				}
+			}
+
+			if (!["Hybrid", "Automatic"].includes(sender.UNSAFE_rawData?.ArousalSettings?.Active)) {
+				logger.info(`${sender}: ${sender.UNSAFE_rawData?.ArousalSettings?.Active}`);
+				invalidReasons.push("Arousal must be either Hybrid or Automatic");
+			}
+
+			if (invalidReasons.length > 0) {
+				sender.Tell("Emote", `*[The following is needed for that room to function:\n${invalidReasons.map(s => " - " + s + ".").join("\n")}\n\nYou can change those settings and try to !join again if you want.]`);
+				return;
+			}
+
+			const customer = this.customers.get(sender.MemberNumber);
+			if (!customer) return;
+
+			customer.participating = true;
+			customer.refresh();
+
+		}, "Join the denial bar");
+
 		this.registerCommand("leave", (connection, args, sender) => {
+			const customer = this.getActiveCustomer(sender.MemberNumber);
+			if (!customer) {
+				sender.Tell("Chat", "You don't seem to have joined the bar, so you're free to leave!");
+				return;
+			}
+
+			logger.info(`${customer} asked to leave`);
+			sender.Tell("Chat", "Sure, let me get you out of those restraints!");
+
+			customer.participating = false;
+
 			freeCharacter(sender);
 			sender.Appearance.RemoveItem("ItemPelvis");
 			sender.Appearance.RemoveItem("ItemVulva");
 			sender.Appearance.RemoveItem("ItemButt");
-			void sender.Kick();
+
 		}, "Get freed and leave the room");
 
 		this.registerCommand("status", this.onStatusCommand.bind(this), "Check your current status.");
@@ -637,8 +743,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 			}
 		} else if (customer.isDom()) {
-			m.push(`Your role is ${customer.role}, and you have ${customer.points} points to use in the shop.`);
-			m.push(`- ${customer.strike} strikes`);
+			m.push(`Your role is ${customer.role}, you have ${customer.points} points to use in the shop.`);
 		}
 
 		sender.Tell("Whisper", m.join("\n"));
@@ -792,80 +897,12 @@ export class MagicDenialBar extends AdministrationLogic {
 		// this.customers.delete(character.MemberNumber);
 	}
 
-	protected async onCharacterEntered(connection: API_Connector, character: API_Character): Promise<void> {
+	protected onCharacterEntered(connection: API_Connector, character: API_Character): void {
 		if (character.IsBot()) return;
 
-		const kickReasons = [];
-		if (character.ItemPermission > BC_PermissionLevel.OwnerLoverWhitelistDominant) {
-			logger.info(`${character}): ${character.ItemPermission}`);
-			kickReasons.push("Whitelist too high");
-		}
+		character.Tell("Emote", format('greetings.entry', connection.Player.VisibleName));
 
-		const itemsNeeded = [
-			["ItemDevices", "SmallWoodenBox"],
-			["ItemDevices", "LowCage"],
-			["ItemArms", "BoxTieArmbinder"],
-			["ItemMouth", "ClothStuffing"],
-			["ItemMouth2", "HarnessPanelGag"],
-			["ItemMouth3", "LatexPostureCollar"],
-			["ItemHead", "LatexBlindfold"],
-			["ItemFeet", "SpreaderMetal"],
-			["ItemPelvis", "PolishedChastityBelt"],
-			["ItemVulva", "VibratingDildo"]
-		];
-
-		for (const needed of itemsNeeded) {
-			const asset = AssetGet(needed[0] as AssetGroupName, needed[1]);
-			if (!character.IsItemPermissionAccessible(asset)) {
-				logger.info(`${character}): missing ${needed[0]}:${needed[1]}`);
-				kickReasons.push(`Needs access to ${asset.DynamicDescription(character)}`);
-			}
-		}
-
-		if (!["Hybrid", "Automatic"].includes(character.UNSAFE_rawData?.ArousalSettings?.Active)) {
-			logger.info(`${character}: ${character.UNSAFE_rawData?.ArousalSettings?.Active}`);
-			kickReasons.push("Arousal must be either Hybrid or Automatic");
-		}
-
-		if (kickReasons.length > 0) {
-			character.Tell("Emote", `*[The following is needed for that room to function:\n${kickReasons.map(s => " - " + s + ".").join("\n")}\n\nYou will be kicked in 10 seconds. You can change and comeback if you want.]`);
-			if (character.IsRoomAdmin()) {
-				character.Tell("Whisper", "[As you are a room admin, you will be allowed to stay.]");
-				logger.info(`Not kicking room admin ${character}`);
-				// } else if (!strict) {
-				// 	character.Tell("Whisper", "[As you were already in the room when the bot started, you will be allowed to stay, but the bot will ignore you]");
-				// 	logger.info(`Not kicking already present ${character}`);
-				// 	return;
-			} else {
-				logger.info(`Kicking ${character}`);
-				await wait(10_000);
-				await character.Kick();
-				return;
-			}
-		}
-
-		character.Tell("Emote", format('greetings.entry_1', connection.Player.VisibleName));
-		character.Tell("Emote", format('greetings.entry_2', connection.Player.VisibleName));
-
-		await wait(5_000);
-
-		let customer = this.customers.get(character.MemberNumber);
-		if (customer) {
-			customer.character = character;
-
-			character.Tell("Chat", format('greetings.known', character.VisibleName));
-
-			if (customer.beingPunished) {
-				customer.dressLike("doll");
-				customer.dollLock();
-				customer.applyRestraints(true);
-			} else {
-				customer.applyRestraints();
-			}
-		} else {
-			customer = new MagicCharacter(character);
-			this.customers.set(character.MemberNumber, customer);
-		}
+		this.addToRoom(character);
 	}
 
 	protected async onMessage(connection: API_Connector, message: BC_Server_ChatRoomMessage, sender: API_Character): Promise<void> {
