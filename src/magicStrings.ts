@@ -48,7 +48,7 @@ export function format(keypath: MagicKeypath, ...args: (string | number)[]) {
 		current = current[key] as MagicSomething;
 	}
 
-	if (!value) {
+	if (value === undefined) {
 		logger.fatal(`failed to resolve ${keypath}`);
 		return "";
 	}
