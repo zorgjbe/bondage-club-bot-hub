@@ -188,6 +188,7 @@ export class MagicCharacter {
 	_vibesIntensity = VibratorIntensity.LOW;
 	lastActivity = 0;
 	lastOrgasmTime = 0;
+	lastVibeChangeTime = 0;
 	rules = new Set<MagicRule>();
 	orders: MagicOrders = {};
 
@@ -260,7 +261,13 @@ export class MagicCharacter {
 			this.character.connection.SendMessage("Action", `Vibe${inc ? "Increase" : "Decrease"}To${this._vibesIntensity}`, this.character.MemberNumber, Dict);
 
 			item.Vibrator?.SetIntensity(this._vibesIntensity, false);
+
+			this.lastVibeChangeTime = Date.now();
 		}
+	}
+
+	hasChangedVibesRecently() {
+		return (Date.now() - this.lastVibeChangeTime) > 5 * 60 * 1000;
 	}
 
 	toString() {
@@ -601,8 +608,9 @@ export class MagicDenialBar extends AdministrationLogic {
 
 		// Bump the vibes up for anyone that hasn't orgasmed in a while
 		this.customers.forEach((character) => {
-			if (character.isSub() && !character.hasOrgasmedRecently())
+			if (character.isSub() && !character.hasOrgasmedRecently() && !character.hasChangedVibesRecently()) {
 				character.vibesIntensity++;
+			}
 		});
 
 		// Find the character that has been idle the most
