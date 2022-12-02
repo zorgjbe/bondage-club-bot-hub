@@ -11,6 +11,15 @@ const punishmentCost = 10;
 const domLv2Cost = 10;
 const adulationCost = 3;
 
+/** The amount of time to wait for an order to be fulfilled */
+const adulationMaxTime = 5 * 60 * 1000;
+
+/** The amount of time to wait before bumping vibes up */
+const orgasmMaxTime = 3 * 60 * 1000;
+
+/** The amout of time to wait before automatically providing something to do */
+const idleMaxTime = 5 * 60 * 1000;
+
 /** The number of strikes that causes punishment to kick in */
 const maxStrikes = 3;
 
@@ -39,16 +48,29 @@ load({
 		]
 	},
 	adulation: {
-		strike: "I asked you something extremely easy and you were not able to do it. This is one strike for you, %s.",
+		failed: "I asked you something extremely easy and you were not able to do it, %s. %s",
 		order: {
-			kiss: "ORDER: Kiss %s's feet or you will receive one strike.",
-			massage: "ORDER: Massage %s's back or you will receive one strike."
+			kiss: "ORDER: Kiss %s's feet.",
+			massage: "ORDER: Massage %s's back."
+		},
+		reward: {
+			no_strike: {
+				success: "",
+				failure: [
+					"One strike for you.",
+					"I'm giving you a strike for that."
+				]
+			},
+			orgasm: {
+				success: "Here, you're allowed to cum once.",
+				failure: "Too bad, you look like you could have enjoyed a bit of relief~"
+			}
 		},
 		success: {
-			kiss: "You did good, %s.",
-			massage: "Well done, %s. I bet she liked this~"
+			kiss: "You did good, %s. %s",
+			massage: "Well done, %s, I bet she liked this!~ %s"
 		},
-		bought: "%s will take care of that. %s points remainining."
+		bought: "%s will take care of that. %s points remaining."
 	},
 	punishment: {
 		too_many_strikes: "%d strikes, you need to be punished now.",
@@ -126,6 +148,7 @@ type MagicOrders = {
 		type: string;
 		handle: NodeJS.Timeout;
 		target: number;
+		reward: string;
 	}
 };
 export class MagicCharacter {
@@ -270,22 +293,81 @@ export class MagicCharacter {
 		// InventoryGet(sender, "ItemMouth3").Property.CombinationNumber = customerList[sender.MemberNumber].lockCode;
 	}
 
+	completeAdulation(target: MagicCharacter, msg: string) {
+		const data = this.orders.adulation;
+		if (!data) return;
+
+		if (target.MemberNumber !== this.orders.adulation?.target) return;
+
+		if (!msg.includes("ChatOther")) return;
+
+		let success = false;
+		switch (data.type) {
+			case "kiss":
+				success = msg.includes("Kiss") && (msg.includes("ItemBoots") || msg.includes("ItemFeet"));
+				break;
+
+			case "massage":
+				success = msg.includes("Massage") && (msg.includes("ItemTorso"));
+				break;
+		}
+
+		if (!success) return;
+
+		logger.info(`${this} performed adulation on ${target}`);
+
+		const rewardMsg = format(`adulation.reward.${data.reward}.success`);
+
+		this.character.Tell("Whisper", format(`adulation.success.${data.type}`, this.name, rewardMsg));
+
+		switch (data.reward) {
+			case "orgasm":
+				this.allowedOrgasms += 1;
+				break;
+
+			default:
+				break;
+		}
+
+		clearTimeout(this.orders.adulation?.handle);
+		delete this.orders.adulation;
+	}
+
 	private adulationCheck() {
+		logger.verbose(`checking adulation result of ${this}`);
 		const data = this.orders.adulation;
 		if (!data) {
 			logger.error(`Spurious adulation check triggered for ${this}`);
 			return;
 		}
 
+		const rewardMsg = format(`adulation.reward.${data.reward}.failure`);
+		this.character.Tell("Whisper", format('adulation.failed', this.name, rewardMsg));
+
+		switch (data.reward) {
+			case "no_strike":
+				this.giveStrike();
+				break;
+
+			default:
+				break;
+		}
+
 		delete this.orders.adulation;
-		this.character.Tell("Whisper", format('adulation.strike', this.name));
-		this.giveStrike();
 	}
 
-	adulate(target: MagicCharacter) {
-		const type = _.sample(["kiss", "massage"]) as string;
+	adulate(target: MagicCharacter, reward?: string) {
+		const available = [];
 
-		this.orders = { "adulation": { type, handle: setTimeout(this.adulationCheck.bind(this), 5 * 60 * 1000), target: target.MemberNumber } };
+		available.push("kiss");
+
+		if (this.character.CanInteract())
+			available.push("massage");
+
+		const type = _.sample(available) as string;
+		reward ??= _.sample(["no_strike", "orgasm"]) as string;
+
+		this.orders = { "adulation": { type, reward, handle: setTimeout(this.adulationCheck.bind(this), adulationMaxTime), target: target.MemberNumber } };
 		this.character.Tell("Whisper", format(`adulation.order.${type}`, target.name));
 	}
 
@@ -311,6 +393,10 @@ export class MagicCharacter {
 		freeCharacter(this.character);
 		reapplyClothing(this.character);
 		this.applyRestraints();
+	}
+
+	hasOrgasmedRecently() {
+		return Date.now() - this.lastOrgasmTime < orgasmMaxTime;
 	}
 
 	private orgasmReaction() {
@@ -393,13 +479,34 @@ export class MagicDenialBar extends AdministrationLogic {
 	}
 
 	update() {
-		for (const [_n, character] of this.customers) {
-			void _n;
-			if (character.isSub() && Math.abs(Date.now() - character.lastOrgasmTime) > 3 * 60 * 1000) {
-				// It's been a while since they haven't orgasmed, bump the vibes up
+		// Bump the vibes up for anyone that hasn't orgasmed in a while
+		this.customers.forEach((character) => {
+			if (character.isSub() && !character.hasOrgasmedRecently())
 				character.vibesIntensity++;
-			}
+		});
+
+		// Find the character that has been idle the most
+		const charactersByActivity = this.findCandidatesForAdulation().sort((a, b) => b.lastActivity - a.lastActivity);
+		const mostIdleCharacter = charactersByActivity.at(0);
+		if (mostIdleCharacter && (Date.now() - mostIdleCharacter.lastActivity) > idleMaxTime) {
+			// Find a dom that's not already targetted
+			const targeted = charactersByActivity.map(c => c.orders.adulation?.target);
+			const untargetedDoms = Array.from(this.customers).map(([n, c]) => c).filter(c => c.isDom() && !targeted.includes(c.MemberNumber));
+			const selectedDom = _.sample(untargetedDoms);
+
+			if (selectedDom)
+				mostIdleCharacter.adulate(selectedDom);
 		}
+	}
+
+	findCandidatesForAdulation() {
+		const subList = [];
+		for (const [idx, potentialTarget] of this.customers) {
+			void idx;
+			if (potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
+				subList.push(potentialTarget);
+		}
+		return subList;
 	}
 
 	registerCommands() {
@@ -488,13 +595,11 @@ export class MagicDenialBar extends AdministrationLogic {
 			return;
 		}
 		const m = [];
-		m.push(`Your role is ${customer.role}, and you have ${customer.points} points to use in the shop.`);
 		if (customer.isSub()) {
 			if (customer.beingPunished) {
-				m.push(`You're currently being punished, and need to resist ${maxResist - customer.orgasmResisted} orgasms before being released.`);
+				m.push(`You're a submissive currently being punished, and need to resist ${maxResist - customer.orgasmResisted} orgasms before being released.`);
 			} else {
-				m.push(`- ${customer.strike} strikes`);
-				m.push(`- ${customer.allowedOrgasms} allowed orgasms.`);
+				m.push(`You're a submissive and currently have ${customer.strike} strikes and ${customer.allowedOrgasms} allowed orgasms.`);
 
 				const adulation = customer.orders.adulation;
 				if (adulation) {
@@ -504,6 +609,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				}
 			}
 		} else if (customer.isDom()) {
+			m.push(`Your role is ${customer.role}, and you have ${customer.points} points to use in the shop.`);
 			m.push(`- ${customer.strike} strikes`);
 		}
 
@@ -602,12 +708,7 @@ export class MagicDenialBar extends AdministrationLogic {
 					return;
 				}
 
-				const subList = [];
-				for (const [idx, potentialTarget] of this.customers) {
-					if (potentialTarget.isSub() && !potentialTarget.beingPunished && !("adulation" in potentialTarget.orders))
-						subList.push(potentialTarget);
-				}
-
+				const subList = this.findCandidatesForAdulation();
 				if (subList.length === 0) {
 					sender.Tell("Whisper", "There are no available submissive customers at the moment. You cannot buy this item.");
 					return;
@@ -618,7 +719,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				logger.info(`${sender} bought adulation from ${targetSub.name}`);
 
 				sender.Tell("Whisper", format('adulation.bought', targetSub.name, customer.points));
-				targetSub.adulate(customer);
+				targetSub.adulate(customer, "no_strike");
 			}
 				break;
 
@@ -843,31 +944,9 @@ export class MagicDenialBar extends AdministrationLogic {
 				logger.info(`${sender} gained ${pointsGained} points`);
 
 			} else if (customer.isSub()) {
-				if (!msg.includes("ChatOther")) return;
+				customer.lastActivity = Date.now();
 
-				const adulationData = customer.orders.adulation;
-				if (!adulationData) return;
-
-				if (targetID !== customer.orders.adulation?.target) return;
-
-				let success = false;
-				switch (adulationData.type) {
-					case "kiss":
-						success = msg.includes("Kiss") && (msg.includes("ItemBoots") || msg.includes("ItemFeet"));
-						break;
-
-					case "massage":
-						success = msg.includes("Massage") && (msg.includes("ItemTorso"));
-						break;
-				}
-
-				if (success) {
-					logger.info(`${sender} performed adulation on ${target}`);
-					sender.Tell("Whisper", format(`adulation.success.${adulationData.type}`, sender.VisibleName));
-
-					clearTimeout(customer.orders.adulation?.handle);
-					delete customer.orders.adulation;
-				}
+				customer.completeAdulation(target, msg);
 			}
 		}
 	}
