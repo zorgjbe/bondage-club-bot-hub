@@ -293,19 +293,32 @@ export class MagicCharacter {
 
 		if (this.character.Reputation.Dominant >= 50) {
 			this.character.Tell("Chat", format('greetings.dom', this.name));
-			this.role = 'dom';
-			this.points = 5;
+			this.setRole("dom");
 			return;
 		}
 
 		this.character.Tell("Chat", format('greetings.sub', this.name));
-		this.role = 'sub1';
-		this.rules.add("denial");
 
 		if (this.character.Reputation.Dominant <= -50) {
 			this.character.Tell("Chat", format('greetings.very_sub'));
-			this.role = 'sub2';
+			this.setRole("sub2");
+		} else {
+			this.setRole("sub1");
 		}
+	}
+
+	setRole(role: MagicCharacterRole) {
+		this.role = role;
+		if (role.includes("dom")) {
+			if (this.points < 5)
+				this.points = 5;
+			this.rules.delete("denial");
+		} else if (role.includes("sub")) {
+			this.rules.add("denial");
+		}
+
+
+		this.applyRestraints();
 	}
 
 	isDom() { return this.role.includes("dom"); }
@@ -737,12 +750,12 @@ export class MagicDenialBar extends AdministrationLogic {
 			const arg1 = args.shift();
 			const arg2 = args.shift();
 			if (arg1 && ["sub1", "sub2", "dom", "dom2"].includes(arg1)) {
-				role = arg1;
+				role = arg1 as MagicCharacterRole;
 				target = customer;
 			} else if (arg1 && (char = this.identifyPlayerInRoom(connection.chatRoom, arg1)) && (typeof char === "object")
 				&& arg2 && ["sub1", "sub2", "dom", "dom2"].includes(arg2)) {
 				target = this.getActiveCustomer(char.MemberNumber);
-				role = arg2;
+				role = arg2 as MagicCharacterRole;
 			}
 
 			if (!target || !role) {
@@ -752,8 +765,7 @@ export class MagicDenialBar extends AdministrationLogic {
 
 			logger.info(`about to op ${target} to ${role}`);
 			customer.character.Tell("Whisper", `Role changed to ${role}`);
-			target.role = role as MagicCharacterRole;
-			target.applyRestraints();
+			target.setRole(role);
 			if (customer.MemberNumber !== target.MemberNumber) {
 				target.character.Tell("Whisper", `Role changed to ${role} by ${customer}`);
 			}
