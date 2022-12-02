@@ -172,6 +172,8 @@ type MagicOrders = {
 		reward: MagicReward;
 	}
 };
+
+type MagicRule = "denial";
 export class MagicCharacter {
 	character: API_Character;
 	participating = false;
@@ -186,7 +188,7 @@ export class MagicCharacter {
 	_vibesIntensity = VibratorIntensity.LOW;
 	lastActivity = 0;
 	lastOrgasmTime = 0;
-	rules: string[] = [];
+	rules = new Set<MagicRule>();
 	orders: MagicOrders = {};
 
 	constructor(char: API_Character) {
@@ -229,7 +231,7 @@ export class MagicCharacter {
 
 		// Cap the intensity. If denial is enabled, never allow them to be stopped
 		if (v > VibratorIntensity.MAXIMUM) v = VibratorIntensity.MAXIMUM;
-		const min = (this.rules.includes("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF);
+		const min = (this.rules.has("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF);
 		if (v <= min) v = min;
 
 		const orgIntensity = this._vibesIntensity;
@@ -291,7 +293,7 @@ export class MagicCharacter {
 
 		this.character.Tell("Chat", format('greetings.sub', this.name));
 		this.role = 'sub1';
-		this.rules.push("denial");
+		this.rules.add("denial");
 
 		if (this.character.Reputation.Dominant <= -50) {
 			this.character.Tell("Chat", format('greetings.very_sub'));
@@ -443,7 +445,7 @@ export class MagicCharacter {
 	}
 
 	giveStrike() {
-		if (!this.isParticipating() || !this.isSub()) return;
+		if (!this.isParticipating()) return;
 
 		this.strike += 1;
 		if (this.strike >= maxStrikes) {
@@ -453,12 +455,13 @@ export class MagicCharacter {
 	}
 
 	applyPunishment() {
-		if (!this.isParticipating() || !this.isSub()) return;
+		if (!this.isParticipating()) return;
 
 		this.dressLike("doll");
 		this.dollLock();
 		this.applyRestraints(true);
 		this.beingPunished = true;
+		this.rules.add("denial");
 		this.character.Tell("Chat", format('punishment.begin'));
 	}
 
@@ -467,6 +470,7 @@ export class MagicCharacter {
 
 		this.strike = 0;
 		this.beingPunished = false;
+		if (this.isDom()) this.rules.delete("denial");
 		freeCharacter(this.character);
 		reapplyClothing(this.character);
 		this.applyRestraints();
@@ -490,7 +494,7 @@ export class MagicCharacter {
 	}
 
 	didResistOrgasm() {
-		if (!this.isParticipating() || !this.rules.includes("denial")) return;
+		if (!this.isParticipating() || !this.rules.has("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
 		this.vibesIntensity = VibratorIntensity.LOW;
@@ -510,7 +514,7 @@ export class MagicCharacter {
 	}
 
 	didOrgasm() {
-		if (!this.isParticipating() || !this.rules.includes("denial")) return;
+		if (!this.isParticipating() || !this.rules.has("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
 		this.vibesIntensity = VibratorIntensity.LOW;
