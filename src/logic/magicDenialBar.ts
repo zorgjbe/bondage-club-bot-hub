@@ -209,28 +209,36 @@ export class MagicCharacter {
 
 	public set vibesIntensity(v: VibratorIntensity) {
 		// Cap the intensity. If denial is enabled, never allow them to be stopped
-		if (this._vibesIntensity >= VibratorIntensity.MAXIMUM) return;
-		if (this._vibesIntensity <= (this.rules.includes("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF)) return;
+		if (v > VibratorIntensity.MAXIMUM) v = VibratorIntensity.MAXIMUM;
+		const min = (this.rules.includes("denial") ? VibratorIntensity.LOW : VibratorIntensity.OFF);
+		if (v <= min) v = min;
 
-		const increase = v > this._vibesIntensity;
+		const orgIntensity = this._vibesIntensity;
 		this._vibesIntensity = v;
 
 		// Update all vibes
-		let changed = false;
-		for (const group of ["ItemBreasts", "ItemVulva", "ItemButt"]) {
-			const item = this.character.Appearance.InventoryGet(group);
+		const vibes = ["ItemBreasts", "ItemVulva", "ItemButt"].map(group => this.character.Appearance.InventoryGet(group))
+			.filter(i => i && i?.Vibrator && i.Vibrator.Intensity !== this._vibesIntensity);
+
+		logger.debug(`found vibes ${vibes.length}, org: ${orgIntensity}, new: ${this._vibesIntensity}`);
+
+		if (orgIntensity < this._vibesIntensity)
+			this.character.Tell("Whisper", format("vibes.increase"));
+		else if (orgIntensity > this._vibesIntensity)
+			this.character.Tell("Whisper", format("vibes.decrease"));
+
+		for (const item of vibes) {
 			if (!item) continue;
 
-			if (item.Vibrator?.Intensity !== this._vibesIntensity) {
-				item.Vibrator?.SetIntensity(this._vibesIntensity, false);
-				changed = true;
-			}
-		}
-		if (changed) {
-			if (increase)
-				this.character.Tell("Whisper", format("vibes.increase", this.name));
-			else
-				this.character.Tell("Whisper", format("vibes.decrease", this.name));
+			const inc = ((item.Vibrator?.Intensity ?? orgIntensity) < this._vibesIntensity);
+
+			const Dict = [];
+			Dict.push({ Tag: "DestinationCharacterName", Text: this.character.VisibleName, MemberNumber: this.MemberNumber });
+			Dict.push({ Tag: "AssetName", AssetName: item.Name });
+
+			this.character.connection.SendMessage("Action", `Vibe${inc ? "Increase" : "Decrease"}To${this._vibesIntensity}`, this.character.MemberNumber, Dict);
+
+			item.Vibrator?.SetIntensity(this._vibesIntensity, false);
 		}
 	}
 
@@ -411,7 +419,9 @@ export class MagicCharacter {
 	}
 
 	hasOrgasmedRecently() {
-		return Date.now() - this.lastOrgasmTime < orgasmMaxTime;
+		if (this.lastOrgasmTime === 0) return false;
+
+		return (Date.now() - this.lastOrgasmTime) < orgasmMaxTime;
 	}
 
 	private orgasmReaction() {
