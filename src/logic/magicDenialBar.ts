@@ -795,6 +795,32 @@ export class MagicDenialBar extends AdministrationLogic {
 			customer.character.Tell("Whisper", "Gave you one strike");
 			customer.giveStrike();
 		});
+
+		this.registerSUCommand("status", (connection, args, senderNum) => {
+			const sender = connection.chatRoom.characters.find(c => c.MemberNumber === senderNum);
+			if (!sender) return;
+
+			const msg = [];
+			msg.push("Currently known characters:");
+			for (const [_n, customer] of this.customers) {
+				if (!this.isInRoom(customer)) continue;
+
+				msg.push(` - ${customer.name}: ${customer.role} ${customer.isParticipating() ? "joined" : "watching"}`);
+				if (customer.isDom()) {
+					msg.push(`   ${customer.strike} strikes, ${customer.points} points`);
+				}
+				if (customer.isSub()) {
+					msg.push(`   ${customer.strike} strikes, ${customer.allowedOrgasms} allowed orgasms`);
+					const data = customer.orders.adulation;
+					if (data) {
+						const target = this.getActiveCustomer(data.target);
+						msg.push(`   currently ordered to ${data.type} ${target} for ${data.reward}`);
+					}
+				}
+			}
+
+			sender.Tell("Whisper", msg.join("\n"));
+		});
 	}
 
 	private onStatusCommand(connection: API_Connector, args: string, sender: API_Character) {
