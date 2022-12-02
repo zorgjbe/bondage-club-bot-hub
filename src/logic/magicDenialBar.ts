@@ -147,7 +147,6 @@ export class MagicCharacter {
 	constructor(char: API_Character) {
 		this.character = char;
 
-		this.rules.push("denial");
 		this.assignRole();
 		this.applyRestraints();
 	}
@@ -211,14 +210,17 @@ export class MagicCharacter {
 	}
 
 	assignRole() {
-		if (this.character.Reputation.Dominant < 50) {
-			this.character.Tell("Chat", format('greetings.sub', this.name));
-			this.role = 'sub1';
-		} else {
+
+		if (this.character.Reputation.Dominant >= 50) {
 			this.character.Tell("Chat", format('greetings.dom', this.name));
 			this.role = 'dom';
 			this.points = 5;
+			return;
 		}
+
+		this.character.Tell("Chat", format('greetings.sub', this.name));
+		this.role = 'sub1';
+		this.rules.push("denial");
 
 		if (this.character.Reputation.Dominant <= -50) {
 			this.character.Tell("Chat", format('greetings.very_sub'));
