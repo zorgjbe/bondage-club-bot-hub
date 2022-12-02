@@ -537,7 +537,10 @@ export class MagicDenialBar extends AdministrationLogic {
 	readonly connection: API_Connector;
 
 	constructor(connection: API_Connector) {
-		super({});
+		super({
+			votingEnabled: false,
+			roomGuardEnabled: false
+		});
 		this.connection = connection;
 		this.customers = new Map();
 		this.connection.Player.SetDescription(botDescription);
