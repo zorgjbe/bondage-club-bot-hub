@@ -637,7 +637,11 @@ export class MagicDenialBar extends AdministrationLogic {
 			}
 
 			const customer = this.customers.get(sender.MemberNumber);
-			if (!customer) return;
+			if (!customer) {
+				logger.error("Join request recieved, but they're not in the customer list");
+				return;
+			}
+			sender.Tell("Whisper", "Have fun!~");
 
 			customer.participating = true;
 			customer.refresh();
@@ -670,7 +674,7 @@ export class MagicDenialBar extends AdministrationLogic {
 		this.registerCommandParsed("shop", this.onBuyCommand.bind(this));
 
 		this.registerSUCommand("role", (connection, args, sender) => {
-			const customer = this.getActiveCustomer(sender);
+			const customer = this.customers.get(sender);
 			if (!customer) return;
 
 			let target;
@@ -705,21 +709,41 @@ export class MagicDenialBar extends AdministrationLogic {
 
 
 		this.registerSUCommand("points", (connection, args, sender) => {
-			const customer = this.getActiveCustomer(sender);
+			const customer = this.customers.get(sender);
 			if (!customer) return;
 
 			logger.info("!su points", args);
 
-			const arg = args.shift();
-			if (!arg) {
-				customer.character.Tell("Whisper", "Missing amount of points: !su points [amount]");
+			const points = args.shift();
+			const targetID = args.shift();
+			if (!points) {
+				customer.character.Tell("Whisper", "Missing amount of points: !su points [amount] [target]");
+				return;
+			}
+			const amount = parseInt(points, 10);
+
+			let target: MagicCharacter | null | undefined = null;
+			let char;
+			if (targetID && (char = this.identifyPlayerInRoom(connection.chatRoom, targetID)) && (typeof char === "object")) {
+				target = this.customers.get(sender);
+			}
+			if (!target) {
+				customer.character.Tell("Whisper", "Invalid target: !su points [amount] [target]");
+				return;
+			}
+			if (!target.isDom()) {
+				customer.character.Tell("Whisper", "Target is not a dom!");
 				return;
 			}
 
-			const amount = parseInt(arg, 10);
-
-			customer.character.Tell("Whisper", `Added ${amount} points`);
-			customer.changePoints(amount);
+			if (customer.MemberNumber !== target.MemberNumber) {
+				customer.character.Tell("Whisper", `Sending ${amount} points to ${target}`);
+				target.character.Tell("Whisper", `${customer} gifted you ${amount} points`);
+				target.changePoints(amount);
+			} else {
+				customer.character.Tell("Whisper", `Added ${amount} points`);
+				customer.changePoints(amount);
+			}
 		});
 
 		this.registerSUCommand("strike", (connection, args, sender) => {
@@ -737,6 +761,7 @@ export class MagicDenialBar extends AdministrationLogic {
 		const customer = this.getActiveCustomer(sender.MemberNumber);
 		if (!customer) {
 			logger.error(`Recieved "status" command from a non-customer: ${sender}`);
+			sender.Tell("Whisper", "You need to join the game first.");
 			return;
 		}
 		const m = [];
