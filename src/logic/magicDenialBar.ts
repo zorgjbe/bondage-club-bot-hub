@@ -506,22 +506,10 @@ export class MagicCharacter {
 		return (Date.now() - this.lastOrgasmTime) < orgasmMaxTime;
 	}
 
-	private orgasmReaction() {
-		this.strike += 1;
-		if (this.strike < maxStrikes) {
-			this.character.Tell("Chat", format('orgasm.warn', this.name, ordinal(maxStrikes)));
-			return;
-		}
-
-		this.character.Tell("Chat", format('orgasm.punish', this.name));
-		this.applyPunishment();
-	}
-
 	didResistOrgasm() {
 		if (!this.isParticipating() || !this.rules.has("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
-		this.vibesIntensity = VibratorIntensity.LOW;
 
 		if (this.beingPunished) {
 			this.orgasmResisted += 1;
@@ -537,20 +525,42 @@ export class MagicCharacter {
 		}
 	}
 
-	didOrgasm() {
+	async didOrgasm() {
 		if (!this.isParticipating() || !this.rules.has("denial")) return;
 
 		this.lastOrgasmTime = Date.now();
-		this.vibesIntensity = VibratorIntensity.LOW;
 
 		if (!this.beingPunished) {
 			if (this.allowedOrgasms > 0) {
+				logger.verbose(`${this} has ${this.allowedOrgasms} orgasms, removing one`);
 				this.allowedOrgasms -= 1;
 				this.character.Tell("Emote", format('orgasm.lost', this.allowedOrgasms));
 			} else {
-				setTimeout(this.orgasmReaction.bind(this), 5 * 1000);
+				await wait(5 * 1000);
+
+				this.strike += 1;
+				if (this.strike < maxStrikes) {
+					logger.verbose(`${this} has orgasmed, adding one strike`);
+
+					this.character.Tell("Chat", format('orgasm.warn', this.name, ordinal(maxStrikes)));
+					return;
+				}
+
+				logger.verbose(`${this} has orgasmed too much, punishing`);
+
+				this.character.Tell("Chat", format('orgasm.punish', this.name));
+				this.applyPunishment();
 			}
 		}
+	}
+
+	releaseCompletely() {
+		this.participating = false;
+
+		freeCharacter(this.character);
+		this.character.Appearance.RemoveItem("ItemPelvis");
+		this.character.Appearance.RemoveItem("ItemVulva");
+		this.character.Appearance.RemoveItem("ItemButt");
 	}
 }
 
@@ -1072,7 +1082,7 @@ export class MagicDenialBar extends AdministrationLogic {
 				return;
 			} else if (msg.startsWith("Orgasm")) {
 				logger.info(`${sender} failed to resist her orgasm`);
-				customer.didOrgasm();
+				void customer.didOrgasm();
 				return;
 			}
 
