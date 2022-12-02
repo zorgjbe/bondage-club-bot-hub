@@ -102,15 +102,25 @@ load({
 		points_awarded: "*Playing with %s netted you +%d points. Keep it up!"
 	},
 	vibes: {
-		increase: "Hehe~ I see you're not enjoying yourself as much as I thought. Here's some motivation for you!",
-		decrease: "Here, let me turn those toys down a bit…"
+		increase: [
+			"Hehe~ I see you're not enjoying yourself as much as I thought. Here's some motivation for you!",
+			"Nothing beats vibing and chilling, right?~"
+		],
+		decrease: [
+			"Here, let me turn those toys down a bit…",
+			"Oh, I'll take down those a notch. Pretty sure you don't mind~"
+		]
 	}
 });
 
+const SOURCE_URL = "https://github.com/zorgjbe/bondage-club-bot-hub/blob/feature/denial-bar/src/logic/magicDenialBar.ts";
+
 const botDescription = `Welcome to the MAGIC DENIAL BAR !
 
+This bot is a reimplementation of one of Lily's RP rooms on top of Jomshir's BotAPI. You can find the source code here: ${SOURCE_URL}.
+
 FOR SUBMISSIVE CUSTOMERS:
-To all our subs customer we provide a free vibrating dildo and chastity belt upon entering.
+To all our subs customer we provide a free vibrating dildo and chastity belt when joining.
 Those that demonstrate a solid submissive history will also receive a complementary anal vibrator!
 Just remember that in our establishment you are prohibited to ever orgasm, unless explicitly authorized by one of our mistress customers.
 Transgressors will be harshly punished.
@@ -137,10 +147,11 @@ In the shop you will be able to buy the following items:
 ------------------------------------------------
 COMMANDS: all commands must be whispered.
 
-!leave - you will be freed and kicked out of the room.
+!join - start playing the denial bar!
+!leave - you will be released from the bar.
+!status - check your current status.
 
 Following commands are for dommes only.
-!status - check your current status.
 !buy - look at the available items in the shop.
 !buy permission <name> - buy a permission for <name>.
 !buy DomLv2 - upgrade your status in the room.
