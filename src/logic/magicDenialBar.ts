@@ -64,6 +64,10 @@ load({
 			orgasm: {
 				success: "Here, you're allowed to cum once.",
 				failure: "Too bad, you look like you could have enjoyed a bit of relief~"
+			},
+			lower_vibes: {
+				success: "Here, I'll lower your vibes…",
+				failure: "I guess you'll keep that dazed look for a bit longer!"
 			}
 		},
 		success: {
@@ -143,12 +147,14 @@ Following commands are for dommes only.
 
 
 type MagicCharacterRole = "sub1" | "sub2" | "dom" | "dom2" | "";
+type MagicReward = "no_strike" | "orgasm" | "lower_vibes";
+type MagicOrderType = "kiss" | "massage";
 type MagicOrders = {
 	"adulation"?: {
-		type: string;
+		type: MagicOrderType;
 		handle: NodeJS.Timeout;
 		target: number;
-		reward: string;
+		reward: MagicReward;
 	}
 };
 export class MagicCharacter {
@@ -356,16 +362,25 @@ export class MagicCharacter {
 		delete this.orders.adulation;
 	}
 
-	adulate(target: MagicCharacter, reward?: string) {
-		const available = [];
-
-		available.push("kiss");
+	adulate(target: MagicCharacter, proposeReward?: MagicReward) {
+		const orders: MagicOrderType[] = [];
+		orders.push("kiss");
 
 		if (this.character.CanInteract())
-			available.push("massage");
+			orders.push("massage");
 
-		const type = _.sample(available) as string;
-		reward ??= _.sample(["no_strike", "orgasm"]) as string;
+		const type = _.sample(orders) as MagicOrderType;
+
+		const rewards: MagicReward[] = [];
+		if (proposeReward) {
+			rewards.push(proposeReward);
+		} else {
+			rewards.push("no_strike");
+			rewards.push("orgasm");
+			if (this.vibesIntensity > VibratorIntensity.LOW)
+				rewards.push("lower_vibes");
+		}
+		const reward = _.sample(rewards) as MagicReward;
 
 		this.orders = { "adulation": { type, reward, handle: setTimeout(this.adulationCheck.bind(this), adulationMaxTime), target: target.MemberNumber } };
 		this.character.Tell("Whisper", format(`adulation.order.${type}`, target.name));
